@@ -1,40 +1,19 @@
 """Perfect-hindsight optimum, as a linear program.
 
-Given the whole price series up front, this finds the schedule that no other
-schedule can beat. That makes it two things at once: an answer to the brief,
-and the ceiling any live strategy is measured against.
+Given the whole price series up front, this finds the schedule no other
+schedule can beat: an answer to the brief, and the ceiling any live strategy is
+measured against. Three unknowns per interval -- energy bought, energy sold,
+and the resulting state of charge -- chosen together to maximise revenue less
+degradation.
 
-The formulation is the standard one for storage arbitrage. For each interval
-``t`` there are three unknowns -- energy bought ``c_t``, energy sold ``d_t``
-(both grid-side), and the resulting state of charge ``s_t`` -- and the solver
-chooses all of them at once to maximise::
+The formulation, the four constraint groups and why an LP rather than a
+heuristic are set out in the README under "Method". The shadow prices of the
+bookkeeping constraints come back as the water value, which is what makes each
+interval explainable.
 
-    sum over t of   p_t * (d_t - c_t)  -  delta * (c_t + d_t)
-
-subject to four groups of constraints:
-
-1. **Bookkeeping** ``s_t = s_{t-1} + eta_c * c_t - d_t / eta_d``.
-   Not a choice but an identity: buying stores only ``eta_c`` of what you pay
-   for, and selling drains more than it delivers. Losses always come out of
-   inventory. These are equalities, and their shadow prices are the water
-   value this module reports.
-
-2. **Tank** ``0 <= s_t <= capacity``. The lower bound is what forbids selling
-   energy that was never bought, so every sale is preceded in time by a buy.
-
-3. **Connection** ``c_t + d_t <= connection limit``. One grid connection with
-   one rating, shared by both directions.
-
-4. **Endpoints**. Start at the given state of charge and finish at the target,
-   so leftover energy cannot be reported as profit.
-
-Note on simultaneous flow: nothing above forbids ``c_t`` and ``d_t`` from both
-being positive. That is deliberate. A battery can reverse direction many times
-inside a 300-second interval, so the behaviour is physically reachable, and at
-sufficiently negative prices it is genuinely profitable -- the round-trip
-losses let the battery be paid to consume without filling up. Forbidding it
-would need a binary variable and would suppress a real effect; instead it is
-priced by ``degradation_cost_per_mwh`` and reported. See the README.
+Nothing here forbids buying and selling in the same interval. That is
+deliberate: it is priced by the degradation cost rather than banned. See the
+README.
 """
 
 from __future__ import annotations
@@ -85,23 +64,37 @@ class ForesightLP:
             spec.initial_soc_mwh if self.terminal_soc_mwh is None else self.terminal_soc_mwh
         )
 
-        # Variables are laid out as one flat vector:
-        #   [ c_0 .. c_n-1 | d_0 .. d_n-1 | s_0 .. s_n-1 ]
+        # A solver takes one flat vector of unknowns, so the three quantities
+        # per interval are laid end to end:
+        #
+        #   index:  0 .. n-1    |   n .. 2n-1   |  2n .. 3n-1
+        #   holds:  c_0 .. c_n-1|  d_0 .. d_n-1 |  s_0 .. s_n-1
+        #           (buy)          (sell)          (state of charge)
+        #
+        # 864 unknowns for a 288-interval day. Every array below is indexed the
+        # same way: one value per unknown, in that order.
         c_at, d_at, s_at = 0, n, 2 * n
         n_vars = 3 * n
 
-        # -- objective ------------------------------------------------------
-        # linprog minimises, so we minimise the negative of revenue. Buying
-        # costs the price plus wear; selling earns the price less wear. A
-        # negative price flips the sign of the buying term on its own, which is
-        # how being paid to charge falls out without a special case.
+        # -- objective: one coefficient per unknown -------------------------
+        # The solver minimises `sum(obj[i] * x[i])`, so we feed it the negative
+        # of revenue. State-of-charge entries stay zero: holding energy neither
+        # earns nor costs. A negative price flips the buying term by itself,
+        # which is why being paid to charge needs no special case.
         obj = np.zeros(n_vars)
         obj[c_at : c_at + n] = p + delta
         obj[d_at : d_at + n] = -p + delta
 
-        # -- equality constraints: state of charge bookkeeping --------------
-        # Row t:  s_t - s_{t-1} - eta_c * c_t + d_t / eta_d  =  0
-        # Row 0 has no predecessor, so the starting level moves to the RHS.
+        # -- equalities: state of charge bookkeeping ------------------------
+        #   s_t - s_{t-1} - eta_c * c_t + d_t / eta_d  =  0
+        #
+        # Conceptually n-by-3n, but only three or four entries per row are
+        # non-zero, so it is built as (row, column, value) triples: entry k
+        # says row `rows[k]`, column `cols[k]`, holds `vals[k]`. Everything
+        # unmentioned is zero.
+        #
+        # Interval 0 has no predecessor, so its opening level is a known number
+        # and moves to the right-hand side instead.
         rows, cols, vals = [], [], []
         for t in range(n):
             rows += [t, t, t]
@@ -116,8 +109,9 @@ class ForesightLP:
         b_eq = np.zeros(n)
         b_eq[0] = spec.initial_soc_mwh
 
-        # -- inequality constraints: shared connection rating ---------------
-        # Row t:  c_t + d_t <= connection limit
+        # -- inequalities: shared connection rating -------------------------
+        # c_t + d_t <= connection limit. Two entries per row, both 1.0, so the
+        # triples are built with array arithmetic rather than a loop.
         connection_limit = max(spec.max_charge_mwh, spec.max_discharge_mwh)
         idx = np.arange(n)
         a_ub = sparse.csr_array(
@@ -129,7 +123,8 @@ class ForesightLP:
         )
         b_ub = np.full(n, connection_limit)
 
-        # -- bounds ---------------------------------------------------------
+        # -- bounds: a floor and a ceiling for each unknown -----------------
+        # Indexed exactly like `obj`.
         lower = np.zeros(n_vars)
         upper = np.empty(n_vars)
         upper[c_at : c_at + n] = spec.max_charge_mwh
@@ -168,9 +163,8 @@ class ForesightLP:
             name=self.name,
             charge_mwh=x[c_at : c_at + n],
             discharge_mwh=x[d_at : d_at + n],
-            # Shadow prices of the bookkeeping rows. We minimised the negative
-            # of revenue, so flipping the sign puts the water value back into
-            # revenue terms: dollars per extra MWh sitting in the tank.
+            # Shadow prices of the bookkeeping rows. We minimised the
+            # negative of revenue, so the sign flips back to $/stored MWh.
             water_value_aud_mwh=-np.asarray(result.eqlin.marginals, dtype=float),
             claimed_net_revenue_aud=-float(result.fun),
         )

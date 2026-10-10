@@ -1,11 +1,9 @@
 """What every strategy produces, and the contract it has to meet.
 
-A strategy decides *when* to buy and sell. It never decides what that is worth:
-it hands back a schedule, and :mod:`bess.asset.simulator` replays it to produce
-state of charge and money. Keeping those jobs apart is what makes a perfect
-hindsight optimiser and a live one comparable -- both are scored by the same
-arithmetic, so any difference in revenue is a difference in decisions rather
-than in bookkeeping.
+A strategy decides *when* to buy and sell, never what that is worth: it returns
+a schedule, and :mod:`bess.asset.simulator` replays it to produce state of
+charge and money. Keeping those apart is what makes a hindsight optimiser and a
+live one comparable.
 """
 
 from __future__ import annotations

@@ -1,16 +1,13 @@
 """Physical description of the battery.
 
-Everything downstream -- the optimiser, the simulator, the dashboard -- reads
-its limits from a single ``BatterySpec``. Nothing else hard-codes a number.
+The optimiser, the simulator and the dashboard all read their limits from a
+single ``BatterySpec``. Values come from :mod:`bess.config`; this module
+describes the shape, not the numbers.
 
-Sign and unit conventions used throughout the project:
-
-* Energy flows (``charge_mwh``, ``discharge_mwh``) are **grid-side**: what the
-  meter at the connection point sees, and therefore what is paid for.
-* State of charge is **inside the battery**.
-* The efficiencies are the exchange rate between those two places, and they
-  always cost you energy: you store less than you buy, and you must drain more
-  than you deliver.
+Unit convention, relied on everywhere: ``charge_mwh`` and ``discharge_mwh`` are
+**grid-side** -- what the meter sees and what is paid for -- while state of
+charge is measured inside the battery. The efficiencies are the exchange rate
+between those two places.
 """
 
 from __future__ import annotations
@@ -22,32 +19,42 @@ MINUTES_PER_HOUR = 60
 
 @dataclass(frozen=True)
 class BatterySpec:
-    """Physical and commercial limits of the battery.
+    """Physical and commercial limits of the battery."""
 
-    Defaults describe the asset in the brief: a 200 MWh / 50 MW system, i.e. a
-    four-hour battery, starting empty.
-    """
-
-    capacity_mwh: float = 200.0
-    max_charge_mw: float = 50.0
-    max_discharge_mw: float = 50.0
-    charge_efficiency: float = 0.90
-    discharge_efficiency: float = 0.90
-    initial_soc_mwh: float = 0.0
-    degradation_cost_per_mwh: float = 5.0
-    interval_minutes: int = 5
+    capacity_mwh: float
+    max_charge_mw: float
+    max_discharge_mw: float
+    charge_efficiency: float
+    discharge_efficiency: float
+    initial_soc_mwh: float
+    degradation_cost_per_mwh: float
+    interval_minutes: int
 
     def __post_init__(self) -> None:
+        """Reject a battery that could not exist.
+
+        These values arrive from config, CLI arguments and dashboard sliders,
+        so the interesting case is not the value we chose but the one someone
+        else supplies. An efficiency above 1 is a perpetual motion machine, and
+        the LP will find the infinite profit it implies.
+        """
         if self.capacity_mwh <= 0:
-            raise ValueError("capacity_mwh must be positive")
+            raise ValueError(f"capacity_mwh must be positive, got {self.capacity_mwh}")
         if self.max_charge_mw <= 0 or self.max_discharge_mw <= 0:
             raise ValueError("power ratings must be positive")
         if not 0 < self.charge_efficiency <= 1:
-            raise ValueError("charge_efficiency must be in (0, 1]")
+            raise ValueError(
+                f"charge_efficiency must be in (0, 1], got {self.charge_efficiency}"
+            )
         if not 0 < self.discharge_efficiency <= 1:
-            raise ValueError("discharge_efficiency must be in (0, 1]")
+            raise ValueError(
+                f"discharge_efficiency must be in (0, 1], got {self.discharge_efficiency}"
+            )
         if not 0 <= self.initial_soc_mwh <= self.capacity_mwh:
-            raise ValueError("initial_soc_mwh must lie within [0, capacity_mwh]")
+            raise ValueError(
+                f"initial_soc_mwh must lie within [0, {self.capacity_mwh}], "
+                f"got {self.initial_soc_mwh}"
+            )
         if self.degradation_cost_per_mwh < 0:
             raise ValueError("degradation_cost_per_mwh must not be negative")
         if self.interval_minutes <= 0:
@@ -62,12 +69,17 @@ class BatterySpec:
 
     @property
     def max_charge_mwh(self) -> float:
-        """Most energy that can be bought in a single interval (grid-side)."""
+        """Most energy that can be bought in one interval, grid-side.
+
+        50 MW for 1/12 of an hour is 4.167 MWh. This limit is what forces the
+        battery to average into a position rather than taking it all at the
+        single best price.
+        """
         return self.max_charge_mw * self.interval_hours
 
     @property
     def max_discharge_mwh(self) -> float:
-        """Most energy that can be sold in a single interval (grid-side)."""
+        """Most energy that can be sold in one interval, grid-side."""
         return self.max_discharge_mw * self.interval_hours
 
     @property
@@ -82,23 +94,24 @@ class BatterySpec:
 
     @property
     def breakeven_price_ratio(self) -> float:
-        """Sell price must exceed buy price by this factor to break even.
-
-        At 81% round-trip you buy 1/0.81 = 1.235 MWh for every MWh you sell, so
-        a spread narrower than ~23.5% destroys value before degradation is even
-        considered.
-        """
+        """Spread needed to break even: 1/0.81, so about 23.5%."""
         return 1.0 / self.round_trip_efficiency
 
     @property
     def simultaneous_flow_price_threshold(self) -> float:
-        """How negative a price must be before burning energy for cash pays.
+        """Price below which buying and selling at once becomes profitable.
 
-        The battery may charge and discharge within the same interval (300
-        seconds is ample time to switch), which consumes grid energy without
-        storing it. Holding SoC flat costs ``(1 + eta_c * eta_d)`` MWh of
-        throughput for every ``(1 - eta_c * eta_d)`` MWh of net consumption, so
-        it only pays when the price is below this threshold. See the README.
+        A battery can reverse direction inside a 300-second interval, so at a
+        negative price it can be paid for the energy its own round-trip losses
+        consume. Derivation and consequences are in the README under
+        "Simultaneous charge and discharge"; at 81% round-trip and $5/MWh of
+        wear the threshold is about -$47.63/MWh.
+
+        Returns:
+            A negative price in AUD/MWh, or ``-inf`` for a lossless battery,
+            where consuming energy is never free.
         """
         rte = self.round_trip_efficiency
+        if rte >= 1.0:
+            return float("-inf")
         return -self.degradation_cost_per_mwh * (1.0 + rte) / (1.0 - rte)
