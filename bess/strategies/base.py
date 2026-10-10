@@ -42,7 +42,12 @@ class Schedule:
 
 
 class Strategy(Protocol):
-    """Anything that can turn prices into a schedule."""
+    """Interface for strategies that turn prices into a schedule.
+
+    A Protocol is used instead of an ABC because strategies only need to satisfy
+    this interface, not share a base class or implementation. This allows any
+    compatible strategy or test stub to be used without inheritance.
+    """
 
     name: str
 
