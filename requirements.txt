@@ -1,0 +1,9 @@
+# Pinned to the versions this was developed and tested against.
+pandas==3.0.6
+numpy==2.5.3
+scipy==1.18.1        # provides the HiGHS LP solver via scipy.optimize.linprog
+requests==2.34.2
+pyarrow==25.0.1      # parquet cache
+streamlit==1.65.0
+plotly==7.1.0
+pytest==9.1.1

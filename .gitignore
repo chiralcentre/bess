@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Raw AEMO downloads: large and re-fetchable. The parsed sample in
+# data/sample/ IS committed so the dashboard runs without network.
+data/raw/
+
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
