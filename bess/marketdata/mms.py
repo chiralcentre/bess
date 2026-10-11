@@ -5,7 +5,7 @@ A file holds several tables, each introduced by its own ``I`` header row::
     I,DISPATCH,PRICE,5,SETTLEMENTDATE,RUNNO,REGIONID,...
     D,DISPATCH,PRICE,5,"2026/10/08 00:05:00",1,NSW1,...
 
-**Columns must be read from the ``I`` row, never fixed positions.** Versions
+**Columns must be read from the ``I`` row, and not fixed indices.** Versions
 differ within one file, so a hard-coded index works until AEMO adds a column
 and then silently reads the wrong one.
 """

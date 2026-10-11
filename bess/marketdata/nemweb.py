@@ -20,16 +20,16 @@ import requests
 NEMWEB_BASE = "https://nemweb.com.au"
 ARCHIVE_PATH = "/Reports/ARCHIVE/DispatchIS_Reports/"
 
-#: The directory listing is IIS-generated and uses uppercase ``<A HREF=`` --
-#: a lowercase-only pattern matches nothing at all, silently.
+# The directory listing is IIS-generated and uses uppercase ``<A HREF=`` --
+# a lowercase-only pattern matches nothing at all, silently.
 _LINK_RE = re.compile(r'href="([^"]+)"', re.IGNORECASE)
 _ARCHIVE_FILE_RE = re.compile(r"PUBLIC_DISPATCHIS_(\d{8})\.zip$", re.IGNORECASE)
 
-DEFAULT_USER_AGENT = "bess-arbitrage-study/1.0 (educational backtest)"
+DEFAULT_USER_AGENT = "bess-educational-backtest"
 
-#: Retry policy. Waits grow as 2 s, 4 s, with full jitter applied by default
-#: so repeated attempts spread out instead of hitting a public server in
-#: lockstep.
+#  Retry policy. Waits grow as 2 s, 4 s, with full jitter applied by default
+#  so repeated attempts spread out instead of hitting a public server in
+#  lockstep.
 MAX_TRIES = 3
 BACKOFF_BASE_SECONDS = 2.0
 
@@ -64,8 +64,6 @@ class NemwebClient:
         self.session = requests.Session()
         self.session.headers["User-Agent"] = user_agent
 
-    # -- listing ------------------------------------------------------------
-
     def list_archive_days(self) -> dict[date, str]:
         """Map each available calendar day to the URL of its daily file.
 
@@ -86,8 +84,6 @@ class NemwebClient:
                 f"{NEMWEB_BASE + ARCHIVE_PATH}; the page layout may have changed"
             )
         return days
-
-    # -- fetching -----------------------------------------------------------
 
     def fetch_archive_day(self, day: date, urls: dict[date, str] | None = None) -> Path:
         """Return a local path to one day's file, downloading it if needed.

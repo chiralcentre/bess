@@ -1,4 +1,4 @@
-# BESS arbitrage — NSW1
+# NSW1 BESS Revenue Maximisation
 
 This repository works out when a 200 MWh battery should buy and sell energy in the NSW1 region
 of Australia's National Electricity Market, from real five-minute dispatch
@@ -25,7 +25,7 @@ pip install -r requirements.txt
 | `python -m pytest` | run tests |
 
 A parsed 30-calendar-day price series is committed under `data/sample/`, so
-**nothing needs the network**. Re-fetching from AEMO takes 51 s and 168 MB; the committed
+**no network call is required**. Re-fetching from AEMO takes 51 s and 168 MB; the committed
 cache loads in 0.24 s.
 
 ## Running a backtest

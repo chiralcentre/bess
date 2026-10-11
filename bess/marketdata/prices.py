@@ -1,12 +1,4 @@
-"""Turning raw dispatch files into a clean NSW1 price series.
-
-Four interpretation rules, each a silent bug if taken the other way:
-
-* Market time is AEST, fixed UTC+10, all year -- never a named zone.
-* ``SETTLEMENTDATE`` labels the END of its interval.
-* ``INTERVENTION = 0`` wins where an intervention run duplicates a timestamp.
-* Gaps are marked untradable, never filled.
-"""
+"""Turning raw dispatch files into a clean NSW1 price series."""
 
 from __future__ import annotations
 
@@ -20,12 +12,12 @@ import pandas as pd
 from bess.marketdata.mms import extract_table
 from bess.marketdata.nemweb import NemwebClient, iter_interval_csvs
 
-#: NEM market time. A fixed offset, deliberately not a named zone: the market
-#: runs on AEST year-round and never shifts for daylight saving.
+# NEM market time. A fixed offset, deliberately not a named zone: the market
+# runs on AEST year-round and never shifts for daylight saving.
 NEM_TIMEZONE = timezone(timedelta(hours=10))
 
-#: Administered bounds on the dispatch price. A value outside these did not
-#: come from the market and almost certainly means a parsing error.
+# Administered bounds on the dispatch price. A value outside these did not
+# come from the market and almost certainly means a parsing error.
 MARKET_FLOOR_PRICE = -1000.0
 MARKET_PRICE_CAP = 20000.0
 
@@ -91,16 +83,6 @@ class PriceSeries:
 
     def __len__(self) -> int:
         return len(self.prices)
-
-    def window(self, start: pd.Timestamp, end: pd.Timestamp) -> PriceSeries:
-        """A half-open slice of this series, keeping the gap mask aligned."""
-        mask = (self.prices.index >= start) & (self.prices.index < end)
-        return PriceSeries(
-            prices=self.prices[mask],
-            tradable=self.tradable[mask],
-            quality=self.quality,
-        )
-
 
 def load_prices(
     client: NemwebClient,
@@ -224,8 +206,7 @@ def _clean(raw: pd.DataFrame, region: str) -> PriceSeries:
     )
 
     # The optimiser needs a number in every interval for the arithmetic to be
-    # defined. Gaps get the series mean, and the tradable mask is what actually
-    # stops the battery acting on any of them.
+    # defined. Gaps get the series mean, and the tradable mask is what actually stops the battery acting on any of them.
     prices = prices.fillna(quality.price_mean)
     prices.name = f"{region}_RRP_AUD_MWH"
 
