@@ -1,4 +1,4 @@
-"""Turning 8,640 five-minute rows into something a trader would read.
+"""Outputs a report for traders to read.
 
 Collapses runs of consecutive same-direction intervals into trades and writes
 the reason in words. The simulator records facts; this module turns them into
@@ -12,7 +12,7 @@ import pandas as pd
 
 from bess.asset.simulator import Action, BindingConstraint
 
-#: Blocks smaller than this are float dust from the solver.
+# Blocks smaller than this are float dust from the solver.
 MIN_TRADE_MWH = 1e-6
 
 
@@ -44,7 +44,8 @@ def build_trade_log(intervals: pd.DataFrame) -> pd.DataFrame:
     breaks = direction_change | time_gap.fillna(True)
     if has_day:
         breaks |= frame["trading_day"].ne(frame["trading_day"].shift())
-
+    # groupby needs a label per row: a value that is identical for every row in a group. 
+    # What the three conditions produce is the opposite: a marker on the rows where a group starts. cumsum converts boundaries into labels.
     frame["_block"] = breaks.cumsum()
 
     rows = [_summarise_block(block) for _, block in frame.groupby("_block")]

@@ -1,15 +1,9 @@
-"""Headline numbers, in the terms a trader would ask for them.
-
-Gross and net revenue are reported separately, since degradation is a real cost
-but not a cashflow. The daily distribution accompanies the total, because NEM
-revenue is concentrated and a total alone hides that.
-"""
+"""Reports headline numbers, in the terms a trader would ask for them."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-import numpy as np
 import pandas as pd
 
 from bess.asset.battery import BatterySpec
@@ -172,11 +166,7 @@ def daily_summary(intervals: pd.DataFrame) -> pd.DataFrame:
 
 
 def _vwap(intervals: pd.DataFrame, volume_column: str) -> float:
-    """Volume-weighted average price, which is the only honest average here.
-
-    A plain mean over intervals would weight a 0.1 MWh interval the same as a
-    full one.
-    """
+    """Volume-weighted average price"""
     volume = intervals[volume_column]
     total = float(volume.sum())
     if total <= 0:
@@ -189,7 +179,16 @@ def _daily_revenue(intervals: pd.DataFrame) -> pd.Series:
 
 
 def _day_key(intervals: pd.DataFrame):
-    """Group by trading day where the backtest labelled one, else calendar day."""
+    """The column to group per-day figures by.
+
+    ``run_backtest`` writes a ``trading_day`` column holding the 04:00 boundary,
+    already corrected for interval-ending timestamps. Use it when it is there.
+
+    A frame straight from :func:`simulate` has no such column, since nothing has
+    told it where a day begins; those fall back to the calendar date. That is a
+    plain midnight cut and would be the wrong boundary for real NEM data, so it
+    only serves the short fixtures in the tests, which span no day boundary.
+    """
     if "trading_day" in intervals.columns:
         return intervals["trading_day"]
     return pd.Series(intervals.index.date, index=intervals.index, name="trading_day")
