@@ -15,6 +15,9 @@ import pandas as pd
 from bess.asset.battery import BatterySpec
 from bess.asset.simulator import Action
 
+#: Clipping below this is solver float dust, not a real infeasibility.
+CLIPPING_TOLERANCE_MWH = 1e-6
+
 
 @dataclass(frozen=True)
 class Metrics:
@@ -55,8 +58,10 @@ class Metrics:
                 "",
                 f"  bought / sold        {self.energy_bought_mwh:>8,.0f} /"
                 f" {self.energy_sold_mwh:,.0f} MWh",
-                f"  full cycles          {self.equivalent_full_cycles:>8.1f}"
-                f"  ({self.cycles_per_day:.2f}/day)",
+                # Cycles rather than raw MWh: this is the wear budget.
+                # Warranties are written in equivalent full cycles, and the
+                # rate is comparable across batteries of different sizes.
+                f"  cycles per day       {self.cycles_per_day:>8.2f}",
                 f"  active intervals     {self.active_interval_share:>8.1%}",
                 "",
                 f"  average buy         ${self.average_buy_price:>14,.2f}",
@@ -68,11 +73,32 @@ class Metrics:
                 f"  median day          ${self.median_day_aud:>14,.2f}",
                 f"  worst day           ${self.worst_day_aud:>14,.2f}",
                 f"  top 3 days           {self.top_three_day_share:>8.1%} of total",
-                "",
-                f"  both directions      {self.simultaneous_flow_intervals:>8,} intervals",
-                f"  clipped              {self.clipped_mwh:>8.1e} MWh",
             ]
+            + self._diagnostics()
         )
+
+    def _diagnostics(self) -> list[str]:
+        """Lines worth printing only when they have something to report.
+
+        Both are zero on every run where the optimiser and the simulator agree,
+        which is every run with a correct LP. A permanent zero teaches a reader
+        to skip the line, so these appear only when they fire.
+        """
+        lines: list[str] = []
+        if self.clipped_mwh > CLIPPING_TOLERANCE_MWH:
+            lines += [
+                "",
+                f"  WARNING: {self.clipped_mwh:,.1f} MWh clipped. The strategy asked for",
+                "  more than the battery could physically deliver.",
+            ]
+        if self.simultaneous_flow_intervals:
+            lines += [
+                "",
+                f"  {self.simultaneous_flow_intervals:,} intervals bought and sold at "
+                "once, which pays only at",
+                "  deeply negative prices. See the README.",
+            ]
+        return lines
 
 
 def summarise(

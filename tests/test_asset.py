@@ -173,3 +173,63 @@ class TestResultSchema:
         assert r.intervals["action"].iloc[0] == Action.CHARGE
         assert r.intervals["action"].iloc[1] == Action.IDLE
         assert set(r.intervals["action"].cat.categories) == {a.value for a in Action}
+
+
+class TestNetStateOfChargeLimits:
+    """The SoC limit applies to the net change, not to each leg separately.
+
+    Regression: the simulator used to clip a buy against headroom measured at
+    the start of the interval, so a full battery lost its entire buy leg even
+    when a sell in the same interval had already made room. The LP treats the
+    pair as feasible, so the two disagreed and the schedule was silently
+    clipped -- which only showed up at a degradation cost low enough for
+    simultaneous flow to be worth doing.
+    """
+
+    def test_a_full_battery_can_buy_while_selling(self, spec: BatterySpec) -> None:
+        spec = replace(spec, initial_soc_mwh=spec.capacity_mwh)
+        # Sized so the legs cancel: stored by the buy equals drained by the sell.
+        buy = 2.302
+        sell = buy * spec.round_trip_efficiency
+
+        r = simulate(spec, pd.Series([-500.0], index=_index(1)),
+                     np.array([buy]), np.array([sell]))
+
+        assert r.clipped_mwh == pytest.approx(0.0, abs=1e-6)
+        assert r.intervals["charge_mwh"].iloc[0] == pytest.approx(buy, abs=1e-6)
+        assert r.intervals["soc_after_mwh"].iloc[0] == pytest.approx(
+            spec.capacity_mwh, abs=1e-6
+        )
+
+    def test_an_empty_battery_can_sell_while_buying(self, spec: BatterySpec) -> None:
+        """The mirror case at the floor."""
+        spec = replace(spec, initial_soc_mwh=0.0)
+        buy = 2.302
+        sell = buy * spec.round_trip_efficiency
+
+        r = simulate(spec, pd.Series([-500.0], index=_index(1)),
+                     np.array([buy]), np.array([sell]))
+
+        assert r.clipped_mwh == pytest.approx(0.0, abs=1e-6)
+        assert r.intervals["discharge_mwh"].iloc[0] == pytest.approx(sell, abs=1e-6)
+
+    def test_a_buy_alone_is_still_capped_at_a_full_battery(
+        self, spec: BatterySpec
+    ) -> None:
+        """Fixing the net case must not remove the limit itself."""
+        spec = replace(spec, initial_soc_mwh=spec.capacity_mwh)
+
+        r = simulate(spec, pd.Series([10.0], index=_index(1)),
+                     np.array([spec.max_charge_mwh]), np.array([0.0]))
+
+        assert r.intervals["charge_mwh"].iloc[0] == pytest.approx(0.0, abs=1e-9)
+        assert r.intervals["binding_constraint"].iloc[0] == BindingConstraint.SOC_CEILING
+
+    def test_a_sell_alone_is_still_capped_at_an_empty_battery(
+        self, spec: BatterySpec
+    ) -> None:
+        r = simulate(spec, pd.Series([500.0], index=_index(1)),
+                     np.array([0.0]), np.array([spec.max_discharge_mwh]))
+
+        assert r.intervals["discharge_mwh"].iloc[0] == pytest.approx(0.0, abs=1e-9)
+        assert r.intervals["binding_constraint"].iloc[0] == BindingConstraint.SOC_FLOOR

@@ -265,8 +265,8 @@ degradation cost prices it instead, and the effect is measurable:
 
 | $\delta$ (AUD/MWh) | Pays below | Intervals observed |
 |---:|---:|---:|
-| 0.00 | −\$0.00 | **40** |
-| 0.50 | −\$4.76 | 29 |
+| 0.00 | −\$0.00 | **45** |
+| 0.50 | −\$4.76 | 31 |
 | 1.00 | −\$9.53 | 0 |
 | 5.00 | −\$47.63 | 0 |
 

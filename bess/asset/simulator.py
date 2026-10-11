@@ -199,17 +199,21 @@ def simulate(
             scale = connection_limit / total
             c, d, reason = c * scale, d * scale, BindingConstraint.CONNECTION
 
-        # 3. The tank must not overflow. Storing takes eta_c of what is bought.
-        headroom = spec.capacity_mwh - soc
-        max_c = headroom / spec.charge_efficiency
-        if c > max_c:
-            c, reason = max(0.0, max_c), BindingConstraint.SOC_CEILING
+        # 3. The tank must neither overflow nor go negative. The limit applies
+        #    to the NET change across the interval, not to each leg on its own:
+        #    a sell in the same interval frees room for a buy. Clipping the
+        #    legs independently would throw away a buy against a full battery
+        #    even when a simultaneous sell had already made space for it.
+        closing = soc + spec.charge_efficiency * c - d / spec.discharge_efficiency
 
-        # 4. The tank must not go negative. Delivering drains 1/eta_d of what
-        #    is sold, so the sellable energy is less than the energy stored.
-        max_d = soc * spec.discharge_efficiency
-        if d > max_d:
-            d, reason = max(0.0, max_d), BindingConstraint.SOC_FLOOR
+        if closing > spec.capacity_mwh:
+            excess = closing - spec.capacity_mwh
+            c = max(0.0, c - excess / spec.charge_efficiency)
+            reason = BindingConstraint.SOC_CEILING
+        elif closing < 0.0:
+            shortfall = -closing
+            d = max(0.0, d - shortfall * spec.discharge_efficiency)
+            reason = BindingConstraint.SOC_FLOOR
 
         stored = spec.charge_efficiency * c
         drained = d / spec.discharge_efficiency
