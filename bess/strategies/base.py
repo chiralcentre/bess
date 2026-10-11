@@ -1,6 +1,6 @@
 """What every strategy produces, and the contract it has to meet.
 
-A strategy decides *when* to buy and sell, never what that is worth: it returns
+A strategy decides when to buy and sell, never what that is worth: it returns
 a schedule, and :mod:`bess.asset.simulator` replays it into money.
 """
 
@@ -23,15 +23,13 @@ class Schedule:
     charge_mwh: np.ndarray
     discharge_mwh: np.ndarray
 
-    #: Marginal value of a stored MWh in each interval, in AUD/MWh, where the
-    #: strategy can say. This is the battery's internal "water value": it buys
-    #: when energy is cheaper than this and sells when it is dearer. Strategies
-    #: that have no such notion leave it as None.
+    # Marginal value of a stored MWh in each interval, in AUD/MWh.
+    # This is the battery's internal "water value": it buys when energy is cheaper than this and sells when it is dearer. 
+    # Strategies that have no such notion leave it as None.
     water_value_aud_mwh: np.ndarray | None = None
 
-    #: The strategy's own claim about what this schedule is worth. Checked
-    #: against the simulator's independent recomputation; disagreement means a
-    #: bug in the strategy.
+    # The strategy's own claim about what this schedule is worth. 
+    # Checked against the simulator's independent recomputation; disagreement means a bug in the strategy.
     claimed_net_revenue_aud: float | None = None
 
     def __post_init__(self) -> None:
@@ -40,12 +38,7 @@ class Schedule:
 
 
 class Strategy(Protocol):
-    """Interface for strategies that turn prices into a schedule.
-
-    A Protocol is used instead of an ABC because strategies only need to satisfy
-    this interface, not share a base class or implementation. This allows any
-    compatible strategy or test stub to be used without inheritance.
-    """
+    """Interface for strategies that turn prices into a schedule."""
 
     name: str
 

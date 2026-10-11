@@ -1,11 +1,10 @@
 """Perfect-hindsight optimum, as a linear program.
 
-Given the whole price series up front, finds the schedule no other schedule can
-beat: both an answer and the ceiling a live strategy is measured against. Three
-unknowns per interval -- energy bought, energy sold, resulting state of charge.
+Given the whole price series up front, this program finds the schedule no other schedule can
+beat. There are three unknowns per interval -- energy bought, energy sold, resulting state of charge.
 
-Nothing here forbids buying and selling in the same interval; the degradation
-cost prices it. Formulation and reasoning are in the README.
+Nothing here forbids buying and selling in the same interval; the degradation cost prices it. 
+Formulation and reasoning are in the README.
 """
 
 from __future__ import annotations
@@ -26,7 +25,7 @@ class InfeasibleScheduleError(RuntimeError):
 class ForesightLP:
     """Revenue-maximising schedule with full knowledge of future prices."""
 
-    name = "Perfect foresight (LP)"
+    name = "ForesightLP"
 
     def __init__(
         self,
@@ -39,8 +38,7 @@ class ForesightLP:
                 spec's starting level, so the battery ends as it began and
                 cannot book opening inventory as profit.
             tradable: optional per-interval mask. Intervals marked False are
-                forced to do nothing, which is how price gaps are handled --
-                a missing price is not a reason to trade on a stale one.
+                forced to do nothing, which is how price gaps are handled.
         """
         self.terminal_soc_mwh = terminal_soc_mwh
         self.tradable = tradable
@@ -56,8 +54,7 @@ class ForesightLP:
             spec.initial_soc_mwh if self.terminal_soc_mwh is None else self.terminal_soc_mwh
         )
 
-        # A solver takes one flat vector of unknowns, so the three quantities
-        # per interval are laid end to end:
+        # A solver takes one flat vector of unknowns, so the three quantities per interval are laid end to end:
         #
         #   index:  0 .. n-1    |   n .. 2n-1   |  2n .. 3n-1
         #   holds:  c_0 .. c_n-1|  d_0 .. d_n-1 |  s_0 .. s_n-1
@@ -68,18 +65,17 @@ class ForesightLP:
         c_at, d_at, s_at = 0, n, 2 * n
         n_vars = 3 * n
 
-        # -- objective: one coefficient per unknown -------------------------
-        # The solver minimises `sum(obj[i] * x[i])`, so we feed it the negative
-        # of revenue. State-of-charge entries stay zero: holding energy neither
-        # earns nor costs. A negative price flips the buying term by itself,
-        # which is why being paid to charge needs no special case.
+        # Objective: one coefficient per unknown
+        # The solver minimises `sum(obj[i] * x[i])`, so we feed it the negative of revenue
+        # Selling gets a negative coefficient but buying gets a positive coefficient.
+        # The SoC block is all zeros: holding energy is free, and s exists purely as bookkeeping to link intervals.
         obj = np.zeros(n_vars)
         obj[c_at : c_at + n] = p + delta
         obj[d_at : d_at + n] = -p + delta
 
-        # -- equalities: state of charge bookkeeping ------------------------
-        #   s_t - s_{t-1} - eta_c * c_t + d_t / eta_d  =  0
-        #
+        # Equalities: state of charge bookkeeping
+        # s_t - s_{t-1} - eta_c * c_t + d_t / eta_d  =  0
+        # 
         # Conceptually n-by-3n, but only three or four entries per row are
         # non-zero, so it is built as (row, column, value) triples: entry k
         # says row `rows[k]`, column `cols[k]`, holds `vals[k]`. Everything
@@ -89,21 +85,22 @@ class ForesightLP:
         # and moves to the right-hand side instead.
         rows, cols, vals = [], [], []
         for t in range(n):
-            rows += [t, t, t]
-            cols += [s_at + t, c_at + t, d_at + t]
-            vals += [1.0, -spec.charge_efficiency, 1.0 / spec.discharge_efficiency]
+            rows.extend([t, t, t])
+            cols.extend([s_at + t, c_at + t, d_at + t])
+            vals.extend([1.0, -spec.charge_efficiency, 1.0 / spec.discharge_efficiency])
             if t > 0:
                 rows.append(t)
                 cols.append(s_at + t - 1)
                 vals.append(-1.0)
 
+        # Use CSR as there are many zeroes and the 2D array is sparse
+        # For a real day the matrix is 288 × 864 = 248,832 entries, of which 1,151 are non-zero (~0.46%)
         a_eq = sparse.csr_array((vals, (rows, cols)), shape=(n, n_vars))
         b_eq = np.zeros(n)
         b_eq[0] = spec.initial_soc_mwh
 
-        # -- inequalities: shared connection rating -------------------------
-        # c_t + d_t <= connection limit. Two entries per row, both 1.0, so the
-        # triples are built with array arithmetic.
+        # Inequalities: shared connection rating
+        # c_t + d_t <= connection limit. Two entries per row, both 1.0, so the triples are built with array arithmetic.
         connection_limit = max(spec.max_charge_mwh, spec.max_discharge_mwh)
         idx = np.arange(n)
         a_ub = sparse.csr_array(
@@ -115,8 +112,8 @@ class ForesightLP:
         )
         b_ub = np.full(n, connection_limit)
 
-        # -- bounds: a floor and a ceiling for each unknown -----------------
-        # Indexed exactly like `obj`.
+        # bounds: a floor and a ceiling for each unknown
+        # Indexed exactly like `obj`
         lower = np.zeros(n_vars)
         upper = np.empty(n_vars)
         upper[c_at : c_at + n] = spec.max_charge_mwh
@@ -130,8 +127,7 @@ class ForesightLP:
             upper[c_at : c_at + n][blocked] = 0.0
             upper[d_at : d_at + n][blocked] = 0.0
 
-        # Pin the final state of charge so the battery cannot finish by
-        # liquidating energy it never paid for.
+        # Pin the final state of charge so the battery cannot finish by liquidating energy it never paid for.
         lower[s_at + n - 1] = terminal
         upper[s_at + n - 1] = terminal
 
@@ -155,8 +151,7 @@ class ForesightLP:
             name=self.name,
             charge_mwh=x[c_at : c_at + n],
             discharge_mwh=x[d_at : d_at + n],
-            # Shadow prices of the bookkeeping rows. We minimised the
-            # negative of revenue, so the sign flips back to $/stored MWh.
+            # We minimised the negative of revenue, so the sign flips back to $/stored MWh.
             water_value_aud_mwh=-np.asarray(result.eqlin.marginals, dtype=float),
             claimed_net_revenue_aud=-float(result.fun),
         )

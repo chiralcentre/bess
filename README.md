@@ -155,7 +155,7 @@ side be replaced:
 - **`SimulationResult`** — what actually happened, per interval, with the
   reason.
 
-### Decisions worth defending
+### Noteworthy Design Decisions
 
 **The simulator is the only place money is computed.** Strategies propose a
 schedule; [`asset/simulator.py`](bess/asset/simulator.py) replays it into state
@@ -175,9 +175,7 @@ nest. [`mms.py`](bess/marketdata/mms.py) knows AEMO's CSV grammar and would
 parse any of their reports. [`prices.py`](bess/marketdata/prices.py) knows what
 the fields *mean*, and holds all the judgment.
 
-**`Strategy` is a Protocol.** Conformance is structural, so a strategy
-satisfies it without importing or subclassing it and a three-line stub works in
-a test. It is a static contract, unenforced at runtime until a type checker is
+**`Strategy` is a Protocol.** A Protocol is used instead of an ABC because strategies only need to satisfy this interface, not share a base class or implementation. This allows any compatible strategy or test stub to be used without inheritance. It is a static contract, unenforced at runtime until a type checker is
 added.
 
 **`BatterySpec` has no defaults.** It describes the *shape* of a battery;
@@ -221,25 +219,145 @@ $$\max \sum_t p_t(d_t - c_t) - \delta(c_t + d_t)$$
 | $c_t + d_t \le 4.167$ MWh | One connection, one rating, shared by both directions. 50 MW for 1/12 h. |
 |  $s_0 = s_T = 0$ | Start and finish empty. |
 
-864 unknowns per day, solved by HiGHS in **7 ms**; all 29 days take 0.2 s.
+864 unknowns per day, solved by HiGHS in a median **4 ms**; all 29 days
+take 0.12 s.
 
 An LP beats a heuristic on three counts. It is exactly optimal. It takes *less*
 code than greedy spread-pairing, which needs headroom bookkeeping and a maximum
 over the SoC path between every candidate pair. And new requirements — cycle
 caps, time-varying limits, network charges — go in as extra rows.
 
+### Handing it to the solver
+
+`scipy.optimize.linprog` accepts exactly one shape, so the formulation above
+has to be rewritten into its five pieces:
+
+$$\min_x c^T x \quad \text{subject to} \quad A_{ub}\,x \le b_{ub}, \quad
+A_{eq}\,x = b_{eq}, \quad l \le x \le u$$
+
+$c$, the two matrices and the bounds are the arguments; $x$ is what comes back
+in `result.x`. All of them are indexed by one convention, fixed before anything
+is built: the three unknowns per interval become three blocks of $n$, and the
+offsets in `foresight_lp.py` are how each block is addressed.
+
+```
+x = [ c_0 ... c_n-1 | d_0 ... d_n-1 | s_0 ... s_n-1 ]
+      c_at = 0        d_at = n        s_at = 2n
+```
+
+| Piece | What goes in it | Size for one day |
+|---|---|---|
+| $c$ | prices, with the sell block negated and $\delta$ added to both | 864 |
+| $A_{eq}, b_{eq}$ | one SoC balance row per interval | 288 x 864 |
+| $A_{ub}, b_{ub}$ | one shared-connection row per interval | 288 x 864 |
+| $l, u$ | tank limits, power ratings, and the terminal pin | 864 each |
+
+Three details follow from that mapping.
+
+**The objective is negated.** `linprog` minimises, so maximising revenue means
+minimising its negative: buying carries $+p_t$ and selling $-p_t$. Reported
+revenue is `-result.fun`. Degradation adds $+\delta$ to **both** blocks, since
+wear is charged on throughput in either direction.
+
+**Most constraints never become rows.** The tank limits $0 \le s_t \le 200$,
+the per-direction power ratings, and the terminal condition (set $l = u = 0$ on
+the last $s$) all live in the bound vectors. Only the shared connection rating
+needs a row in $A_{ub}$, because it couples two variables. Bounds are the
+cheaper place to put a constraint; the solver handles them inside the basis
+rather than carrying an extra row through every factorisation.
+
+**The matrices are almost entirely zero.** Interval $t$ touches only
+$s_{t-1}$, $s_t$, $c_t$ and $d_t$, so $A_{eq}$ holds four nonzeros per row:
+1,151 of 248,832 entries, or 0.46%. Storing that densely would mean
+factorising a quarter of a million numbers to represent a thousand facts, so
+the code accumulates `(row, col, value)` triples and hands over a
+`sparse.csr_array`.
+
+### A worked example
+
+[docs/lp-walkthrough.md](docs/lp-walkthrough.md) runs a four-interval instance
+end to end, printing $c$, $A_{eq}$, $b_{eq}$, $A_{ub}$, $b_{ub}$ and the bounds
+in full, then checking the returned solution back against each of them.
+
+### What HiGHS does with it
+
+The constraints carve out a convex polytope. A linear objective has no interior
+optimum, so the best point is a vertex, and a vertex has a signature: with $m$
+equality rows, at most $m$ variables sit strictly between their bounds and the
+rest are pinned. The four-interval instance in the walkthrough bears that out:
+$d_3$, $s_0$, $s_1$ and $s_2$ land interior against its four balance rows, and
+the other eight sit on a bound.
+
+Simplex starts at a vertex and pivots, swapping one pinned variable for one
+basic variable to step along an edge to a better neighbour, and stops when no
+neighbour improves. Convexity makes that stopping rule a proof of global
+optimality. A full day takes around 300 pivots for 288 intervals, close to one
+decision per interval.
+
+The shadow prices in the next section come out of the same solve. Simplex needs
+reduced costs to choose each pivot, and those are computed from the dual
+solution $y = c_B B^{-1}$, so by the time the solver can prove optimality it is
+already holding $\lambda$. Explainability costs one unary minus.
+
 ### Explainability
 
-The bookkeeping constraints are equalities, so their shadow prices fall out of
-the solver. Each is **what a stored MWh is worth at that moment**: a
-reservation price in \$/MWh, borrowed from hydro scheduling, where a dam
-operator asks the same question about water behind the dam.
+Every constraint in an LP carries a shadow price: the derivative of the optimal
+objective with respect to that constraint's right-hand side.
 
-The policy is one comparison: charge when $p_t/\eta_c < \lambda_t$, discharge
-when $p_t \eta_d > \lambda_t$, otherwise hold. $\lambda$ holds **flat while nothing binds** and jumps
-when a limit bites, which is what makes it read as a clean line — on 4 October
-it sat at \$112.19 for hours. The dashboard plots it over the price, and the
-trade log quotes it in words:
+$$\lambda_t = \frac{\partial\,(\text{optimal revenue})}{\partial\, b_{eq}[t]}$$
+
+HiGHS returns them alongside the schedule, so they cost nothing extra to
+obtain.
+
+```python
+water_value_aud_mwh=-np.asarray(result.eqlin.marginals, dtype=float)
+```
+
+The rows being differentiated are the balance rows, and writing one with its
+right-hand side visible shows what that derivative is taken against:
+
+$$s_t = s_{t-1} + \eta_c c_t - \frac{d_t}{\eta_d} + b_{eq}[t]$$
+
+`b_eq[t]` is energy appearing in the tank that nobody bought, normally zero. So
+the derivative is a valuation of inventory: **give the battery one more MWh
+already sitting in the tank at interval $t$, and the day's profit rises by
+$\lambda_t$**, measured in \$/MWh. The sign flip in the code is there because
+the objective handed to the solver is the negative of revenue;
+[the walkthrough](docs/lp-walkthrough.md#what-the-shadow-prices-mean) checks
+each row's value against a perturbation and covers where the linearity ends.
+
+Stored energy needs its own valuation because what was paid for it is history
+and says nothing about whether to sell now. What matters is the best remaining
+opportunity to use it, and $\lambda_t$ measures exactly that, over everything
+the optimiser can see. Hydro schedulers reached the same place first: water
+behind a dam arrived free, so they value it by the best remaining release and
+call the number the **water value**. The name is kept here.
+
+What it buys is a local answer to a global question. The LP sets 864 variables
+at once, so a complete account of any single trade involves all 288 prices
+interacting. $\lambda_t$ collapses that into one threshold test:
+
+$$\text{charge while } \frac{p_t + \delta}{\eta_c} \le \lambda_t,
+\qquad \text{discharge while } (p_t - \delta)\,\eta_d \ge \lambda_t,
+\qquad \text{otherwise hold}$$
+
+Each left-hand side is converted to the same units as $\lambda_t$: the cost of
+one MWh *added* to the tank, and the revenue from one MWh *drained* out of it.
+The efficiencies do the grid-side-to-tank-side conversion and $\delta$ charges
+the wear, which makes the comparison a like-for-like one.
+
+These are complementary slackness conditions, so they bind exactly. Across the
+29 days, 1,729 charge intervals and 1,411 discharge intervals, the worst-case
+slack is zero to floating-point precision; no trade in the backtest sits on the
+wrong side of its threshold. The band between the two thresholds is the
+round-trip hurdle in another form, and 94% of the 5,212 idle intervals fall
+inside it.
+
+$\lambda_t$ holds **flat while nothing binds**, since every interval in such a
+stretch competes for the same marginal MWh and has to value it identically. It
+steps when a limit bites. On 4 October it took 17 distinct values across 288
+intervals and held \$112.19 from 17:15 through to 03:55, and that staircase is
+what makes it legible plotted over the price. The trade log quotes it in words:
 
 > *Sold 162.5 MWh over 200 minutes at a volume-weighted \$165.36/MWh, above the
 > \$124.11 the battery valued stored energy at.*

@@ -80,18 +80,18 @@ class Metrics:
         """
         lines: list[str] = []
         if self.clipped_mwh > CLIPPING_TOLERANCE_MWH:
-            lines += [
+            lines.extend([
                 "",
                 f"  WARNING: {self.clipped_mwh:,.1f} MWh clipped. The strategy asked for",
                 "  more than the battery could physically deliver.",
-            ]
+            ])
         if self.simultaneous_flow_intervals:
-            lines += [
+            lines.extend([
                 "",
                 f"  {self.simultaneous_flow_intervals:,} intervals bought and sold at "
                 "once, which pays only at",
                 "  deeply negative prices. See the README.",
-            ]
+            ])
         return lines
 
 
