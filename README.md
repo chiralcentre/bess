@@ -255,10 +255,17 @@ battery sits idle 62% of the time.
 Nothing forbids $c_t$ and $d_t$ from both being positive, deliberately. A
 battery reverses direction in well under a second, so across a 300-second
 interval it can do both, and at a negative price it is paid for the energy its
-own round-trip losses consume. Holding SoC flat means $d = \text{rte} \cdot c$, so it pays
-when
+own round-trip losses consume. Holding SoC flat means $d = \text{rte} \cdot c$,
+so the net energy taken is $c(1 - \text{rte})$ while the wear is charged on
+$c(1 + \text{rte})$. Set against doing nothing, it pays when
 
 $$|p| > \delta \frac{1 + \text{rte}}{1 - \text{rte}}$$
+
+Doing nothing is rarely the alternative, though. While the tank has room,
+charging alone earns $|p| \cdot c$ against this action's
+$|p| \cdot c(1 - \text{rte})$ **and** stores energy worth selling later, so it
+wins at any price. The threshold only decides anything once charging is
+blocked, which in practice means a full battery.
 
 Suppressing it needs a binary variable and hides real behaviour. The
 degradation cost prices it instead, and the effect is measurable:

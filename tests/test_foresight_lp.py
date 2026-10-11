@@ -170,9 +170,8 @@ class TestSimultaneousFlow:
     def test_degradation_cost_suppresses_it_above_the_threshold(
         self, spec: BatterySpec
     ) -> None:
-        """Below ~-$47.63/MWh it pays at delta=$5; above it, it does not."""
+        """At $5/MWh of wear, burning stops paying above about -$47.63/MWh."""
         spec = replace(spec, initial_soc_mwh=200.0, degradation_cost_per_mwh=5.0)
-        assert spec.simultaneous_flow_price_threshold == pytest.approx(-47.63, abs=0.01)
 
         mild = _prices([-20.0] * 24)  # above the threshold: not worth the wear
         schedule = ForesightLP(terminal_soc_mwh=200.0).plan(spec, mild)

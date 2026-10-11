@@ -14,7 +14,6 @@ from dataclasses import replace
 import pandas as pd
 import streamlit as st
 
-from bess.asset.battery import BatterySpec
 from bess.backtest import run_backtest
 from bess.config import CONFIG
 from bess.dashboard.charts import (
@@ -215,10 +214,8 @@ def main() -> None:
 
 - Simulator clipped `{metrics.clipped_mwh:.1e}` MWh, so the schedule was
   always physically possible.
-- `{metrics.simultaneous_flow_intervals}` intervals bought and sold at once.
-  That only pays below
-  `${BatterySpec(200.0, power, power, efficiency, efficiency, 0.0, degradation, 5).simultaneous_flow_price_threshold:,.2f}`/MWh
-  and this window bottoms out at `${prices.quality.price_min:,.2f}`.
+- `{metrics.simultaneous_flow_intervals}` intervals bought and sold at once,
+  which pays only at deeply negative prices. See the README.
 - `{result.partial_days_dropped}` partial day(s) dropped at the window edges.
 
 **Known biases**

@@ -133,9 +133,8 @@ class SimulationResult:
         """Intervals where the battery both bought and sold.
 
         Reachable by switching direction inside the 300-second interval, and
-        profitable only below
-        :attr:`BatterySpec.simultaneous_flow_price_threshold`. Reported rather
-        than forbidden -- see the README.
+        worth doing only at deeply negative prices against a full battery.
+        Reported rather than forbidden; the README has the derivation.
         """
         return int((self.intervals["action"] == Action.BOTH).sum())
 

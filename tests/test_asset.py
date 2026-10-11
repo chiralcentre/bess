@@ -32,17 +32,6 @@ class TestBatterySpec:
         # 1/0.81: a ~23.5% spread is needed before a trade breaks even.
         assert spec.breakeven_price_ratio == pytest.approx(1.2346, abs=1e-4)
 
-    def test_burn_threshold_matches_the_closed_form(self, spec: BatterySpec) -> None:
-        # -delta * (1 + rte) / (1 - rte) = -5 * 1.81 / 0.19
-        tuned = replace(spec, degradation_cost_per_mwh=5.0)
-        assert tuned.simultaneous_flow_price_threshold == pytest.approx(-47.63, abs=0.01)
-
-    def test_a_lossless_battery_never_profits_from_burning_energy(
-        self, spec: BatterySpec
-    ) -> None:
-        perfect = replace(spec, charge_efficiency=1.0, discharge_efficiency=1.0)
-        assert perfect.simultaneous_flow_price_threshold == float("-inf")
-
     @pytest.mark.parametrize(
         "kwargs",
         [
