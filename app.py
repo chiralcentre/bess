@@ -225,8 +225,6 @@ def main() -> None:
 - **Price taking.** 50 MW discharging into a tight peak would push the price
   down, which overstates revenue exactly where it matters most.
 - **Perfect fills.** A real battery offers into dispatch and may not be taken.
-- **Energy only.** No FCAS or capacity contracts, which understates the real
-  revenue stack and partly offsets the two biases above.
 """
         )
 

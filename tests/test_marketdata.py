@@ -136,10 +136,23 @@ class TestCleaning:
         assert series.prices.iloc[0] == pytest.approx(-87.5)
         assert series.quality.negative_price_intervals == 1
 
-    def test_an_impossible_price_is_rejected_as_a_parsing_error(self) -> None:
+    def test_a_price_below_the_market_floor_is_rejected(self) -> None:
+        """The floor is fixed in the Rules, so nothing below it was cleared."""
         raw = _raw([
             {"SETTLEMENTDATE": "2026/10/08 00:05:00", "REGIONID": "NSW1",
-             "RUNNO": 1, "INTERVENTION": 0, "RRP": 1e9},
+             "RUNNO": 1, "INTERVENTION": 0, "RRP": -5000.0},
         ])
-        with pytest.raises(ValueError, match="parsing error"):
+        with pytest.raises(ValueError, match="market floor"):
             _clean(raw, "NSW1")
+
+    def test_a_scarcity_price_above_an_old_cap_is_accepted(self) -> None:
+        """The Market Price Cap is indexed yearly and rises on a legislated
+        schedule, so the parser deliberately sets no ceiling. Bounding against
+        a stale cap would reject the real prices of a scarcity event.
+        """
+        raw = _raw([
+            {"SETTLEMENTDATE": "2026/10/08 00:05:00", "REGIONID": "NSW1",
+             "RUNNO": 1, "INTERVENTION": 0, "RRP": 23200.0},
+        ])
+        series = _clean(raw, "NSW1")
+        assert series.prices.iloc[0] == pytest.approx(23200.0)

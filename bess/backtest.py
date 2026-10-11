@@ -20,7 +20,7 @@ from bess.asset.simulator import SimulationResult, simulate
 from bess.marketdata.prices import DataQualityReport, PriceSeries
 from bess.strategies.base import Schedule, Strategy
 
-#: Dispatch intervals in a full trading day.
+# Dispatch intervals in a full trading day.
 INTERVALS_PER_DAY = 288
 
 Horizon = Literal["daily", "continuous"]

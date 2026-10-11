@@ -8,7 +8,7 @@ is in the README under "Assumptions"; vary one for a sensitivity run with
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta, timezone
+from datetime import date
 from pathlib import Path
 
 from bess.asset.battery import BatterySpec
@@ -18,17 +18,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 @dataclass(frozen=True)
 class MarketConfig:
-    """Which market, and the conventions that govern reading its data."""
+    """Which market to operate in."""
 
     region: str
-    timezone_offset_hours: int
-    market_floor_price: float
-    market_price_cap: float
-
-    @property
-    def tzinfo(self) -> timezone:
-        """Market time as a fixed offset. Never a named zone: the NEM has no DST."""
-        return timezone(timedelta(hours=self.timezone_offset_hours))
 
 
 @dataclass(frozen=True)
@@ -74,12 +66,7 @@ BATTERY = BatterySpec(
     interval_minutes=5,          # five-minute settlement since October 2021
 )
 
-MARKET = MarketConfig(
-    region="NSW1",
-    timezone_offset_hours=10,    # AEST, fixed, all year
-    market_floor_price=-1000.0,
-    market_price_cap=20000.0,
-)
+MARKET = MarketConfig(region="NSW1")
 
 BACKTEST = BacktestConfig(
     start_date=date(2026, 9, 9),
@@ -96,5 +83,5 @@ PATHS = Paths(
     / "nsw1_dispatch_price_20260909_20261008.parquet",
 )
 
-#: The configuration everything reads from.
+# The configuration everything reads from.
 CONFIG = Config(battery=BATTERY, market=MARKET, backtest=BACKTEST, paths=PATHS)

@@ -417,9 +417,11 @@ Four interpretation rules, each a silent bug if taken the other way:
 
 Also handled: `INTERVENTION = 0` wins where an intervention run duplicates a
 timestamp, with a fallback where only the intervention run exists; republished
-intervals keep the highest `RUNNO`; a price outside [−\$1,000, \$20,000] raises
-as a parsing error; and downloads are written atomically, so an interrupted
-fetch can never masquerade as a complete cache entry.
+intervals keep the highest `RUNNO`; a price below the −\$1,000 market floor
+raises as a parsing error, with no matching ceiling because the Market Price
+Cap is indexed annually and a hard-coded one would reject genuine scarcity
+prices; and downloads are written atomically, so an interrupted fetch can never
+masquerade as a complete cache entry.
 
 ```
 NSW1  2026-09-09 00:05 to 2026-10-09 00:00 AEST

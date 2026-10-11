@@ -16,10 +16,11 @@ from bess.marketdata.nemweb import NemwebClient, iter_interval_csvs
 # runs on AEST year-round and never shifts for daylight saving.
 NEM_TIMEZONE = timezone(timedelta(hours=10))
 
-# Administered bounds on the dispatch price. A value outside these did not
-# come from the market and almost certainly means a parsing error.
+# The NEM Market Floor Price, fixed in the Rules and not indexed, so a price
+# below it was misparsed rather than cleared. There is deliberately no matching
+# ceiling: the Market Price Cap is indexed every year and rises on a legislated
+# schedule, so any hard-coded value eventually rejects real scarcity prices.
 MARKET_FLOOR_PRICE = -1000.0
-MARKET_PRICE_CAP = 20000.0
 
 DISPATCH_INTERVAL = timedelta(minutes=5)
 
@@ -169,16 +170,12 @@ def _clean(raw: pd.DataFrame, region: str) -> PriceSeries:
 
     frame = kept.set_index("SETTLEMENTDATE").sort_index()
 
-    out_of_range = (
-        frame["RRP"].isna()
-        | (frame["RRP"] < MARKET_FLOOR_PRICE)
-        | (frame["RRP"] > MARKET_PRICE_CAP)
-    )
-    if out_of_range.any():
+    unusable = frame["RRP"].isna() | (frame["RRP"] < MARKET_FLOOR_PRICE)
+    if unusable.any():
         raise ValueError(
-            f"{int(out_of_range.sum())} RRP values fall outside "
-            f"[{MARKET_FLOOR_PRICE}, {MARKET_PRICE_CAP}] or failed to parse; "
-            f"which indicates a parsing error: no market produces these"
+            f"{int(unusable.sum())} RRP values failed to parse or fall below "
+            f"the market floor of {MARKET_FLOOR_PRICE}; the market does not "
+            f"produce these, so a column was read wrongly"
         )
 
     # A complete grid, so a missing interval shows up as a hole. Dropping it
