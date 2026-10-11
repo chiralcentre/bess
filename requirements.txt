@@ -1,4 +1,5 @@
-# Pinned to the versions this was developed and tested against.
+# Requires Python 3.11 or newer (StrEnum).
+# Developed and tested on 3.14.6; versions pinned so results reproduce exactly.
 pandas==3.0.6
 numpy==2.5.3
 scipy==1.18.1        # provides the HiGHS LP solver via scipy.optimize.linprog

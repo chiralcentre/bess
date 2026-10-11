@@ -202,11 +202,11 @@ def _clean(raw: pd.DataFrame, region: str) -> PriceSeries:
         raise ValueError(
             f"{int(out_of_range.sum())} RRP values fall outside "
             f"[{MARKET_FLOOR_PRICE}, {MARKET_PRICE_CAP}] or failed to parse; "
-            f"that indicates a parsing error rather than a market event"
+            f"which indicates a parsing error: no market produces these"
         )
 
-    # A complete grid, so a missing interval shows up as a hole rather than
-    # vanishing from the index and quietly shortening the day.
+    # A complete grid, so a missing interval shows up as a hole. Dropping it
+    # from the index would quietly shorten the day.
     grid = pd.date_range(
         frame.index.min(), frame.index.max(), freq=DISPATCH_INTERVAL, tz=NEM_TIMEZONE
     )

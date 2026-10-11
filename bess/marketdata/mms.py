@@ -103,7 +103,7 @@ def extract_table(text: str, report: str, subtype: str) -> pd.DataFrame:
 def declared_record_count(text: str) -> int | None:
     """Row count from the ``C,"END OF REPORT",N`` footer, if present.
 
-    Lets a caller confirm a file arrived whole rather than truncated.
+    Lets a caller confirm a file arrived whole.
     """
     for line in reversed(text.splitlines()):
         if not line.strip():

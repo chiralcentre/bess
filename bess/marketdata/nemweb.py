@@ -1,7 +1,7 @@
 """Fetching raw dispatch files from AEMO's public NEMWEB server.
 
-Targets the daily ``ARCHIVE`` files rather than ``Current``: a thirty-day
-backtest is thirty downloads there against roughly 8,640. Each daily file is a
+Targets the daily ``ARCHIVE`` files. A thirty-day backtest is thirty downloads
+there, against roughly 8,640 from ``Current``. Each daily file is a
 **zip of 288 zips**, one per dispatch interval, each holding a single CSV.
 
 Everything is cached to disk by filename, so later runs are offline and
@@ -59,8 +59,8 @@ class NemwebClient:
     def list_archive_days(self) -> dict[date, str]:
         """Map each available calendar day to the URL of its daily file.
 
-        The archive is listed rather than guessed. Days do go missing, and a
-        constructed URL would turn that into a 404 mid-run instead of a clear
+        The archive is listed, then read. Days do go missing, and a
+        constructed URL turns that into a 404 mid-run, where a listing says
         "this day is not available" up front.
         """
         html = self._get(NEMWEB_BASE + ARCHIVE_PATH).decode("utf-8", "replace")

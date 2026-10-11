@@ -2,7 +2,7 @@
 
 The optimiser, the simulator and the dashboard all read their limits from a
 single ``BatterySpec``. Values come from :mod:`bess.config`; this module
-describes the shape, not the numbers.
+describes the shape; the config holds the numbers.
 
 Unit convention, relied on everywhere: ``charge_mwh`` and ``discharge_mwh`` are
 **grid-side** -- what the meter sees and what is paid for -- while state of
@@ -72,8 +72,8 @@ class BatterySpec:
         """Most energy that can be bought in one interval, grid-side.
 
         50 MW for 1/12 of an hour is 4.167 MWh. This limit is what forces the
-        battery to average into a position rather than taking it all at the
-        single best price.
+        battery to average into a position over many intervals, even when one
+        price is far better than the rest.
         """
         return self.max_charge_mw * self.interval_hours
 

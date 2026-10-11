@@ -6,14 +6,12 @@ measured against. Three unknowns per interval -- energy bought, energy sold,
 and the resulting state of charge -- chosen together to maximise revenue less
 degradation.
 
-The formulation, the four constraint groups and why an LP rather than a
-heuristic are set out in the README under "Method". The shadow prices of the
-bookkeeping constraints come back as the water value, which is what makes each
-interval explainable.
+The formulation, the four constraint groups and the case for an LP are set out
+in the README. The shadow prices of the bookkeeping constraints come back as
+the water value, which is what makes each interval explainable.
 
 Nothing here forbids buying and selling in the same interval. That is
-deliberate: it is priced by the degradation cost rather than banned. See the
-README.
+deliberate: the degradation cost prices it. See the README.
 """
 
 from __future__ import annotations
@@ -111,7 +109,7 @@ class ForesightLP:
 
         # -- inequalities: shared connection rating -------------------------
         # c_t + d_t <= connection limit. Two entries per row, both 1.0, so the
-        # triples are built with array arithmetic rather than a loop.
+        # triples are built with array arithmetic.
         connection_limit = max(spec.max_charge_mwh, spec.max_discharge_mwh)
         idx = np.arange(n)
         a_ub = sparse.csr_array(

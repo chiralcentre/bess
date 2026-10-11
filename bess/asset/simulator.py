@@ -8,7 +8,7 @@ constraint matrix is right.
 
 Infeasible requests are clipped to what the battery could really do, and the
 removed energy is recorded. A broken strategy shows up as non-zero
-``clipped_mwh`` rather than as impossible profit.
+``clipped_mwh``, and its revenue stays physically achievable.
 """
 
 from __future__ import annotations
@@ -30,8 +30,8 @@ class Action(StrEnum):
     """What the battery did in an interval.
 
     A ``StrEnum`` so the column holds ordinary strings while code refers to
-    ``Action.CHARGE`` rather than a bare literal, making a typo an
-    ``AttributeError`` instead of a silent non-match.
+    ``Action.CHARGE``, so a typo raises ``AttributeError`` at the point it is
+    written.
     """
 
     CHARGE = "charge"
@@ -43,8 +43,8 @@ class Action(StrEnum):
 class BindingConstraint(StrEnum):
     """Which limit, if any, stopped the battery doing more in an interval.
 
-    This is the backbone of explainability: "it discharged 2.6 MWh rather than
-    4.2 because the tank ran dry" is a complete answer, and it comes from here.
+    This is the backbone of explainability: "it discharged 2.6 MWh of a possible 4.2
+    because the tank ran dry" is a complete answer, and it comes from here.
     """
 
     NONE = "none"
@@ -55,7 +55,7 @@ class BindingConstraint(StrEnum):
 
 #: Columns every ``SimulationResult`` is guaranteed to carry. Reporting, the
 #: dashboard and the tests all read against this, so it is checked on
-#: construction rather than discovered as a KeyError three modules later.
+#: construction, where a missing column can still be named.
 REQUIRED_COLUMNS: tuple[str, ...] = (
     "price_aud_mwh",
     "charge_mwh",
@@ -90,7 +90,7 @@ class SimulationResult:
 
         A DataFrame has no schema of its own, so without this
         :data:`REQUIRED_COLUMNS` is only a comment. Failing here names the
-        missing column, rather than surfacing as a ``KeyError`` in a callback.
+        missing column, close to where the mistake was made.
         """
         missing = [c for c in REQUIRED_COLUMNS if c not in self.intervals.columns]
         if missing:
@@ -251,7 +251,7 @@ def simulate(
             "degradation_aud": degradation,
             "net_revenue_aud": gross - degradation,
             # Categorical with the enum as its categories, so an unexpected
-            # value becomes NaN here instead of propagating as a live string.
+            # value becomes NaN here, where it is visible.
             "action": pd.Categorical(action, dtype=_ACTION_DTYPE),
             "binding_constraint": pd.Categorical(binding, dtype=_CONSTRAINT_DTYPE),
         },

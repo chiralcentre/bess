@@ -1,30 +1,49 @@
-"""Running a strategy across a window, one trading day at a time.
+"""Running a strategy across a window.
 
-Wires the packages together: takes a price series and a strategy, optimises
-each trading day independently, replays every schedule through the simulator,
-and returns one frame covering the whole window.
+Wires the packages together: takes a price series and a strategy, optimises,
+replays every schedule through the simulator, and returns one frame covering
+the whole window.
 
-Days are optimised separately rather than as one long horizon. That keeps the
-battery on a daily cycle, which is what a real operator runs and what warranty
-cycle limits assume, and it makes daily revenue the natural reporting unit. The
-cost is that charge cannot be carried across a day boundary -- a stated
-simplification that slightly understates revenue.
+Two horizons are available, and the choice is a real modelling decision.
+
+``"daily"`` (the default)
+    Each trading day is optimised on its own, opening and closing empty. The
+    battery stays on a daily cycle, which is how a real operator runs it and
+    how warranty cycle limits are counted, and every day's revenue is a
+    self-contained round trip that can be compared with any other day.
+
+``"continuous"``
+    One optimisation across the whole window, with state of charge flowing
+    freely over day boundaries and only the first and last levels pinned. This
+    earns more, because the daily reset is bookkeeping rather than physics --
+    a real battery does not empty itself at 04:00. The cost is that a day's
+    revenue becomes a cashflow: it can sell energy bought the day before, so
+    per-day figures stop being round trips.
+
+Continuous mode also removes the ceiling the daily reset was quietly placing on
+how long the battery sits full. The model charges for throughput and nothing
+for standing still, so a long hold at high state of charge is free here in a
+way it is not in reality. See the README under "Limitations".
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import timedelta
+from typing import Literal
 
+import numpy as np
 import pandas as pd
 
 from bess.asset.battery import BatterySpec
 from bess.asset.simulator import SimulationResult, simulate
 from bess.marketdata.prices import DataQualityReport, PriceSeries
-from bess.strategies.base import Strategy
+from bess.strategies.base import Schedule, Strategy
 
 #: Dispatch intervals in a full trading day.
 INTERVALS_PER_DAY = 288
+
+Horizon = Literal["daily", "continuous"]
 
 
 @dataclass(frozen=True)
@@ -36,6 +55,7 @@ class BacktestResult:
     strategy_name: str
     quality: DataQualityReport
     partial_days_dropped: int
+    horizon: Horizon = "daily"
 
     @property
     def trading_days(self) -> int:
@@ -44,6 +64,16 @@ class BacktestResult:
     @property
     def net_revenue_aud(self) -> float:
         return float(self.intervals["net_revenue_aud"].sum())
+
+    @property
+    def days_are_round_trips(self) -> bool:
+        """Whether each day's revenue stands on its own.
+
+        True under a daily horizon, where every day opens and closes empty.
+        False under a continuous horizon, where a day may sell energy bought
+        earlier, making its revenue a cashflow.
+        """
+        return self.horizon == "daily"
 
     def day(self, day: pd.Timestamp) -> pd.DataFrame:
         """Just one trading day's intervals."""
@@ -56,10 +86,9 @@ def assign_trading_days(
     """Label each interval with the trading day it falls in.
 
     Timestamps are interval-*ending*, so the interval stamped 04:00 covers
-    03:55 to 04:00 and belongs to the day that is finishing, not the one
-    starting. Stepping back one interval before taking the date handles that
-    off-by-one, which would otherwise put one interval of every day in the
-    wrong bucket.
+    03:55 to 04:00 and belongs to the day that is finishing. Stepping back one
+    interval before taking the date handles that off-by-one, which otherwise
+    puts one interval of every day in the wrong bucket.
     """
     shifted = index - pd.Timedelta(hours=start_hour) - pd.Timedelta(interval)
     return pd.Series(shifted.normalize(), index=index)
@@ -71,56 +100,52 @@ def run_backtest(
     strategy: Strategy,
     trading_day_start_hour: int = 4,
     drop_partial_days: bool = True,
+    horizon: Horizon = "daily",
 ) -> BacktestResult:
-    """Optimise and simulate every complete trading day in the window.
+    """Optimise and simulate the window, by day or in one pass.
 
     Args:
         spec: the battery being operated.
         prices: cleaned price series, including the tradable mask.
         strategy: anything satisfying the :class:`Strategy` protocol.
         trading_day_start_hour: hour in market time at which a day rolls over.
+            Defaults to 4: the NEM trading day runs 04:00-03:59 AEST.
         drop_partial_days: skip days with fewer than 288 intervals. A part-day
-            produces a revenue figure that is not comparable with the others,
-            which would distort the daily distribution.
+            produces a revenue figure that is not comparable with the others.
+            Applied under both horizons, so the two are measured over exactly
+            the same intervals.
+        horizon: ``"daily"`` optimises each trading day independently;
+            ``"continuous"`` optimises the whole window in one pass.
 
     Returns:
         A :class:`BacktestResult` whose frame carries every simulator column
         plus ``trading_day`` and ``water_value_aud_mwh``.
     """
+    if horizon not in ("daily", "continuous"):
+        raise ValueError(f"horizon must be 'daily' or 'continuous', got {horizon!r}")
+
     interval = timedelta(minutes=spec.interval_minutes)
     days = assign_trading_days(prices.prices.index, trading_day_start_hour, interval)
 
-    frames: list[pd.DataFrame] = []
-    dropped = 0
+    complete = days.groupby(days).transform("size") == INTERVALS_PER_DAY
+    dropped = int(days[~complete].nunique()) if drop_partial_days else 0
+    keep = complete.to_numpy() if drop_partial_days else np.ones(len(days), dtype=bool)
 
-    for day, stamps in days.groupby(days):
-        window = prices.prices.loc[stamps.index]
-        if drop_partial_days and len(window) < INTERVALS_PER_DAY:
-            dropped += 1
-            continue
-
-        mask = prices.tradable[prices.prices.index.isin(stamps.index)]
-        schedule = _plan_with_mask(strategy, spec, window, mask)
-        result = simulate(spec, window, schedule.charge_mwh, schedule.discharge_mwh)
-
-        frame = result.intervals.copy()
-        frame["trading_day"] = day
-        frame["water_value_aud_mwh"] = (
-            schedule.water_value_aud_mwh
-            if schedule.water_value_aud_mwh is not None
-            else pd.NA
-        )
-        frames.append(frame)
-
-    if not frames:
+    if not keep.any():
         raise ValueError(
             f"no complete trading days in {prices.quality.start:%Y-%m-%d} to "
             f"{prices.quality.end:%Y-%m-%d}; {dropped} partial day(s) were dropped"
         )
 
-    intervals = pd.concat(frames).sort_index()
-    # Cumulative revenue is per-day from the simulator; restate it across the
-    # whole window so the P&L curve is continuous.
+    window = prices.prices[keep]
+    tradable = prices.tradable[keep]
+    labels = days[keep]
+
+    runner = _run_daily if horizon == "daily" else _run_continuous
+    intervals = runner(spec, window, tradable, labels, strategy)
+
+    # The simulator restarts its running total per call, so restate it across
+    # the whole window and the P&L curve stays continuous.
     intervals["cumulative_net_revenue_aud"] = intervals["net_revenue_aud"].cumsum()
 
     return BacktestResult(
@@ -129,24 +154,76 @@ def run_backtest(
         strategy_name=getattr(strategy, "name", type(strategy).__name__),
         quality=prices.quality,
         partial_days_dropped=dropped,
+        horizon=horizon,
     )
 
 
-def _plan_with_mask(strategy: Strategy, spec: BatterySpec, window, mask):
-    """Hand the strategy a per-day tradable mask where it can accept one.
+def _run_daily(
+    spec: BatterySpec,
+    window: pd.Series,
+    tradable: np.ndarray,
+    labels: pd.Series,
+    strategy: Strategy,
+) -> pd.DataFrame:
+    """One optimisation per trading day, each opening and closing empty."""
+    mask = pd.Series(tradable, index=window.index)
+    frames = []
+    for day, stamps in labels.groupby(labels):
+        prices = window.loc[stamps.index]
+        schedule = _plan(strategy, spec, prices, mask.loc[stamps.index].to_numpy())
+        frames.append(_frame(spec, prices, schedule, day))
+    return pd.concat(frames).sort_index()
 
-    Only strategies that take a mask can honour it; the protocol does not
-    require one, so this sets it where the attribute exists and leaves other
-    strategies alone.
+
+def _run_continuous(
+    spec: BatterySpec,
+    window: pd.Series,
+    tradable: np.ndarray,
+    labels: pd.Series,
+    strategy: Strategy,
+) -> pd.DataFrame:
+    """One optimisation across the window, state of charge crossing days."""
+    schedule = _plan(strategy, spec, window, tradable)
+    frame = _frame(spec, window, schedule, day=None)
+    frame["trading_day"] = labels.to_numpy()
+    return frame
+
+
+def _frame(
+    spec: BatterySpec,
+    prices: pd.Series,
+    schedule: Schedule,
+    day: pd.Timestamp | None,
+) -> pd.DataFrame:
+    """Simulate one schedule and attach its day label and water value."""
+    result = simulate(spec, prices, schedule.charge_mwh, schedule.discharge_mwh)
+    frame = result.intervals.copy()
+    if day is not None:
+        frame["trading_day"] = day
+    frame["water_value_aud_mwh"] = (
+        schedule.water_value_aud_mwh
+        if schedule.water_value_aud_mwh is not None
+        else pd.NA
+    )
+    return frame
+
+
+def _plan(
+    strategy: Strategy, spec: BatterySpec, prices: pd.Series, mask: np.ndarray
+) -> Schedule:
+    """Hand the strategy a tradable mask where it can accept one.
+
+    The protocol does not require a mask, so this sets it where the attribute
+    exists and leaves other strategies alone.
     """
-    if hasattr(strategy, "tradable"):
-        original = strategy.tradable
-        try:
-            strategy.tradable = mask
-            return strategy.plan(spec, window)
-        finally:
-            strategy.tradable = original
-    return strategy.plan(spec, window)
+    if not hasattr(strategy, "tradable"):
+        return strategy.plan(spec, prices)
+    original = strategy.tradable
+    try:
+        strategy.tradable = mask
+        return strategy.plan(spec, prices)
+    finally:
+        strategy.tradable = original
 
 
 def as_simulation_result(backtest: BacktestResult) -> SimulationResult:

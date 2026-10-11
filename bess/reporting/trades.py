@@ -5,10 +5,10 @@ of time, a direction, a volume, an average price, and a reason. This module
 collapses runs of consecutive intervals with the same action into those blocks
 and writes the reason in words.
 
-The reason is assembled here rather than in the simulator on purpose. The
-simulator records facts -- which constraint bound, what the state of charge
-was -- and this module turns facts into prose. Keeping that split means the
-physics is testable without parsing English.
+The reason is assembled here, deliberately. The simulator records facts --
+which constraint bound, what the state of charge was -- and this module turns
+those facts into prose. That split keeps the physics testable without parsing
+English.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import pandas as pd
 
 from bess.asset.simulator import Action, BindingConstraint
 
-#: Blocks smaller than this are float dust from the solver, not trades.
+#: Blocks smaller than this are float dust from the solver.
 MIN_TRADE_MWH = 1e-6
 
 

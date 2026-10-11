@@ -241,3 +241,77 @@ class TestMetrics:
     def test_summarising_nothing_is_an_error(self, spec: BatterySpec) -> None:
         with pytest.raises(ValueError, match="empty"):
             summarise(pd.DataFrame(), spec)
+
+
+class TestHorizons:
+    """Daily resets against one continuous optimisation.
+
+    The daily reset is bookkeeping, not physics: a real battery does not empty
+    itself at 04:00. These tests pin down what changes when it is lifted.
+    """
+
+    def test_continuous_never_earns_less_than_daily(self, spec: BatterySpec) -> None:
+        """A property, not a fixture.
+
+        Every daily-reset schedule is feasible in the continuous problem -- it
+        simply happens to touch zero at each boundary -- so the continuous
+        optimum can never be worse. If this fails, the continuous formulation
+        has lost a degree of freedom somewhere.
+        """
+        prices = _price_series(_two_days())
+
+        daily = run_backtest(spec, prices, ForesightLP(), 4, horizon="daily")
+        continuous = run_backtest(spec, prices, ForesightLP(), 4, horizon="continuous")
+
+        assert continuous.net_revenue_aud >= daily.net_revenue_aud - 1e-6
+
+    def test_both_horizons_cover_the_same_intervals(self, spec: BatterySpec) -> None:
+        """Otherwise the revenue comparison is measuring two different windows."""
+        prices = _price_series(_two_days())
+
+        daily = run_backtest(spec, prices, ForesightLP(), 4, horizon="daily")
+        continuous = run_backtest(spec, prices, ForesightLP(), 4, horizon="continuous")
+
+        assert daily.intervals.index.equals(continuous.intervals.index)
+        assert daily.trading_days == continuous.trading_days
+
+    def test_daily_closes_every_day_empty(self, spec: BatterySpec) -> None:
+        prices = _price_series(_two_days())
+        result = run_backtest(spec, prices, ForesightLP(), 4, horizon="daily")
+
+        closing = result.intervals.groupby("trading_day")["soc_after_mwh"].last()
+        assert closing.abs().max() == pytest.approx(0.0, abs=1e-6)
+        assert result.days_are_round_trips
+
+    def test_continuous_carries_charge_across_the_boundary(
+        self, spec: BatterySpec
+    ) -> None:
+        """The whole point: energy bought on one day can be sold on the next."""
+        # Cheap all through day one, expensive all through day two, so the only
+        # profitable trade spans the boundary.
+        values = [10.0] * 288 + [400.0] * 288
+        prices = _price_series(values + values[:288])
+        result = run_backtest(spec, prices, ForesightLP(), 4, horizon="continuous")
+
+        closing = result.intervals.groupby("trading_day")["soc_after_mwh"].last()
+        assert (closing > 1.0).any()
+        assert not result.days_are_round_trips
+
+    def test_continuous_still_finishes_empty(self, spec: BatterySpec) -> None:
+        """Only the ends are pinned, so nothing is liquidated that was not bought."""
+        prices = _price_series(_two_days())
+        result = run_backtest(spec, prices, ForesightLP(), 4, horizon="continuous")
+
+        assert result.intervals["soc_after_mwh"].iloc[-1] == pytest.approx(
+            0.0, abs=1e-6
+        )
+
+    def test_unknown_horizon_is_rejected(self, spec: BatterySpec) -> None:
+        with pytest.raises(ValueError, match="horizon must be"):
+            run_backtest(
+                spec, _price_series(_two_days()), ForesightLP(), 4, horizon="weekly"
+            )
+
+    def test_daily_is_the_default(self, spec: BatterySpec) -> None:
+        prices = _price_series(_two_days())
+        assert run_backtest(spec, prices, ForesightLP(), 4).horizon == "daily"

@@ -7,7 +7,7 @@ settlement would pay. Net subtracts modelled degradation, which is a real cost
 but not a cashflow. Conflating them either overstates the P&L or hides what the
 wear assumption is doing.
 
-**The daily distribution, not just the total.** NEM revenue is concentrated:
+**The daily distribution alongside the total.** NEM revenue is concentrated:
 the market is energy-only, so price spikes are the mechanism that funds peaking
 capacity, and a handful of days can carry a large share of the value. A total
 alone hides that, and it is the first thing to check before trusting a number.

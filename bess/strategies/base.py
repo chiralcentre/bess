@@ -33,7 +33,7 @@ class Schedule:
 
     #: The strategy's own claim about what this schedule is worth. Checked
     #: against the simulator's independent recomputation; disagreement means a
-    #: bug in the strategy, not a better answer.
+    #: bug in the strategy.
     claimed_net_revenue_aud: float | None = None
 
     def __post_init__(self) -> None:
