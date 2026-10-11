@@ -1,8 +1,6 @@
 """Replay a schedule through the battery and record what happened.
 
-The only place in the project that turns a schedule into state of charge and
-into money, so every strategy is scored by identical arithmetic and the
-optimiser's objective can be checked against an independent recomputation.
+The simulator is the only place in the project that turns a schedule into state of charge and money.
 
 Infeasible requests are clipped to what the battery could really do, with the
 removed energy recorded in ``clipped_mwh``.
@@ -18,18 +16,12 @@ import pandas as pd
 
 from bess.asset.battery import BatterySpec
 
-#: Flows below this are treated as zero. Guards against float dust in the LP
-#: solution being reported as a trade.
+# Flows below this are treated as zero. Guards against float dust in the LP solution being reported as a trade.
 TOL_MWH = 1e-9
 
 
 class Action(StrEnum):
-    """What the battery did in an interval.
-
-    A ``StrEnum`` so the column holds ordinary strings while code refers to
-    ``Action.CHARGE``, so a typo raises ``AttributeError`` at the point it is
-    written.
-    """
+    """Descibes what the battery did in an interval."""
 
     CHARGE = "charge"
     DISCHARGE = "discharge"
@@ -38,10 +30,10 @@ class Action(StrEnum):
 
 
 class BindingConstraint(StrEnum):
-    """Which limit, if any, stopped the battery doing more in an interval.
+    """Describes which limit, if any, stopped the battery doing more in an interval.
 
-    This is the backbone of explainability: "it discharged 2.6 MWh of a possible 4.2
-    because the tank ran dry" is a complete answer, and it comes from here.
+    This allows for explainability: "it discharged 2.6 MWh of a possible 4.2
+    because the tank ran dry" is a complete answer which comes from here.
     """
 
     NONE = "none"
@@ -49,10 +41,7 @@ class BindingConstraint(StrEnum):
     SOC_CEILING = "soc_ceiling"
     SOC_FLOOR = "soc_floor"
 
-
-#: Columns every ``SimulationResult`` is guaranteed to carry. Reporting, the
-#: dashboard and the tests all read against this, so it is checked on
-#: construction, where a missing column can still be named.
+# Columns every ``SimulationResult`` is guaranteed to carry.
 REQUIRED_COLUMNS: tuple[str, ...] = (
     "price_aud_mwh",
     "charge_mwh",
@@ -83,11 +72,8 @@ class SimulationResult:
     spec: BatterySpec
 
     def __post_init__(self) -> None:
-        """Check the frame carries what everything downstream expects.
-
-        A DataFrame has no schema of its own, so without this
-        :data:`REQUIRED_COLUMNS` is only a comment. Failing here names the
-        missing column, close to where the mistake was made.
+        """Check the frame carries what everything downstream expects in REQUIRED_COMMENTS.
+        Failing here names the missing column, close to where the mistake was made.
         """
         missing = [c for c in REQUIRED_COLUMNS if c not in self.intervals.columns]
         if missing:
@@ -167,9 +153,8 @@ def simulate(
     requested_d = np.asarray(discharge_mwh, dtype=float)
     price = prices.to_numpy(dtype=float)
 
-    # A single grid connection, so one shared rating governs flow in either
-    # direction. If the charge and discharge ratings differ, the connection
-    # must be sized for the larger of the two.
+    # A single grid connection, so one shared rating governs flow in either direction. 
+    # If the charge and discharge ratings differ, the connection must be sized for the larger of the two.
     connection_limit = max(spec.max_charge_mwh, spec.max_discharge_mwh)
 
     out_c = np.zeros(n)
@@ -191,8 +176,7 @@ def simulate(
         if d > spec.max_discharge_mwh:
             d, reason = spec.max_discharge_mwh, BindingConstraint.CONNECTION
 
-        # 2. Shared connection rating. Scale both legs proportionally so the
-        #    intended balance between them is preserved.
+        # 2. Shared connection rating. Scale both legs proportionally so the intended balance between them is preserved.
         total = c + d
         if total > connection_limit + TOL_MWH:
             scale = connection_limit / total
