@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-import pandas as pd
 import streamlit as st
 
 from bess.backtest import run_backtest

@@ -26,7 +26,6 @@ def _index(n: int) -> pd.DatetimeIndex:
 
 class TestBatterySpec:
     def test_derived_quantities_match_the_brief(self, spec: BatterySpec) -> None:
-        assert spec.duration_hours == pytest.approx(4.0)
         assert spec.max_charge_mwh == pytest.approx(50.0 / 12)
         assert spec.round_trip_efficiency == pytest.approx(0.81)
         # 1/0.81: a ~23.5% spread is needed before a trade breaks even.

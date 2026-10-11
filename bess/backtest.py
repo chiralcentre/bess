@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 
 from bess.asset.battery import BatterySpec
-from bess.asset.simulator import SimulationResult, simulate
+from bess.asset.simulator import simulate
 from bess.marketdata.prices import DataQualityReport, PriceSeries
 from bess.strategies.base import Schedule, Strategy
 
@@ -204,8 +204,3 @@ def _plan(
         return strategy.plan(spec, prices)
     finally:
         strategy.tradable = original
-
-
-def as_simulation_result(backtest: BacktestResult) -> SimulationResult:
-    """View the whole window as a single simulation, for the headline totals."""
-    return SimulationResult(intervals=backtest.intervals, spec=backtest.spec)

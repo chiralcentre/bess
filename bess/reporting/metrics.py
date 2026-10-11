@@ -25,7 +25,6 @@ class Metrics:
     revenue_per_mwh_capacity: float
     energy_bought_mwh: float
     energy_sold_mwh: float
-    equivalent_full_cycles: float
     cycles_per_day: float
     average_buy_price: float
     average_sell_price: float
@@ -127,7 +126,6 @@ def summarise(
         revenue_per_mwh_capacity=net / spec.capacity_mwh,
         energy_bought_mwh=bought,
         energy_sold_mwh=sold,
-        equivalent_full_cycles=cycles,
         cycles_per_day=cycles / days,
         average_buy_price=buy_price,
         average_sell_price=sell_price,

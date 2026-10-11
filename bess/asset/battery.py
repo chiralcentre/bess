@@ -77,12 +77,6 @@ class BatterySpec:
         return self.charge_efficiency * self.discharge_efficiency
 
     @property
-    def duration_hours(self) -> float:
-        """Hours of output at full power from full. 
-        For example, given a 200 MWh capacity battery with a 50 MW max discharge rate, we get a 200 / 50 = 4 hour battery."""
-        return self.capacity_mwh / self.max_discharge_mw
-
-    @property
     def breakeven_price_ratio(self) -> float:
         """Spread needed to break even"""
         return 1.0 / self.round_trip_efficiency

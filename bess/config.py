@@ -43,7 +43,6 @@ class BacktestConfig:
 @dataclass(frozen=True)
 class Paths:
     raw_dir: Path
-    sample_dir: Path
     price_cache: Path
 
 
@@ -76,7 +75,6 @@ BACKTEST = BacktestConfig(
 
 PATHS = Paths(
     raw_dir=PROJECT_ROOT / "data" / "raw",
-    sample_dir=PROJECT_ROOT / "data" / "sample",
     price_cache=PROJECT_ROOT
     / "data"
     / "sample"

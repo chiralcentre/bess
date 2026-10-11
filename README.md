@@ -44,7 +44,7 @@ python run.py
 
 ```
   net revenue         $    348,221.37
-  full cycles              31.9  (1.10/day)
+  cycles per day           1.10
 ```
 
 **Continuous** — one optimisation across all 29 days, with charge free to carry
@@ -56,7 +56,7 @@ python run.py --horizon continuous
 
 ```
   net revenue         $    376,190.50
-  full cycles              31.0  (1.07/day)
+  cycles per day           1.07
 ```
 
 Continuous earns **8.0% more**, holding up to 190.7 MWh overnight, and does it
@@ -454,7 +454,7 @@ produces byte-identical output, down to the individual schedule.
 `run.py --refresh` re-fetches from AEMO to confirm the cache still matches.
 
 ```
-Perfect foresight (LP) over 29 trading days
+ForesightLP over 29 trading days
 
   net revenue         $    348,221.37
     gross             $    412,334.85
@@ -462,7 +462,7 @@ Perfect foresight (LP) over 29 trading days
   per MWh capacity    $      1,741.11
 
   bought / sold           7,084 / 5,738 MWh
-  full cycles              31.9  (1.10/day)
+  cycles per day           1.10
   active intervals        37.6%
 
   average buy         $         31.28
@@ -472,6 +472,9 @@ Perfect foresight (LP) over 29 trading days
   best day            $     24,268.81
   median day          $     12,006.27
   worst day           $      1,192.00
+  top 3 days              19.5% of total
+
+  2 partial day(s) dropped at the window edges; a part-day's revenue is not comparable.
 ```
 
 ### Sensitivity
@@ -496,7 +499,7 @@ behind it and is among the largest levers:
 
 | One-way $\eta$ | Round trip | Hurdle | Net revenue | | $\delta$ (AUD/MWh) | Net revenue | Cycles/day |
 |---:|---:|---:|---:|:--:|---:|---:|---:|
-| 0.85 | 72% | 38.4% | \$300,916 | | 0.0 | \$417,993 | 1.37 |
+| 0.85 | 72% | 38.4% | \$300,916 | | 0.0 | \$418,773 | 1.38 |
 | **0.90** | **81%** | **23.5%** | **\$348,221** | | **5.0** | **\$348,221** | **1.10** |
 | 0.95 | 90% | 10.8% | \$400,171 | | 10.0 | \$287,150 | 1.00 |
 | 1.00 | 100% | 0.0% | \$461,374 | | 20.0 | \$183,422 | 0.76 |
@@ -565,7 +568,7 @@ energy bought earlier, so its revenue becomes a cashflow.
 
 ## Testing
 
-70 tests. The ones that matter:
+98 tests. The ones that matter:
 
 - **LP objective equals simulator revenue** — two independent routes to one
   number; disagreement means a sign error in the constraint matrix.
@@ -593,8 +596,9 @@ energy bought earlier, so its revenue becomes a cashflow.
   throughput, and state of charge is perfectly preserved while idle: 150 MWh
   parked for a week ends at exactly 150 MWh. Self-discharge, auxiliary load and
   calendar ageing are all absent, so holding a full battery is free in the
-  model in a way it is not in reality. The daily reset capped this at 7.1 hours;
-  a continuous horizon holds for up to 14.6.
+  model in a way it is not in reality. The longest the battery sits idle
+  holding charge is 6.2 hours under a daily horizon and 8.4 under a
+  continuous one.
 - **Per-trade cashflow is one-sided.** A sell row books the full sale while the
   purchase sits in an earlier buy row. Totals reconcile exactly, and round-trip
   profit becomes unambiguous at day level, where each day opens and closes

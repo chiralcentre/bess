@@ -93,24 +93,6 @@ def extract_table(text: str, report: str, subtype: str) -> pd.DataFrame:
     return acc.to_frame()
 
 
-def declared_record_count(text: str) -> int | None:
-    """Row count from the ``C,"END OF REPORT",N`` footer, if present.
-
-    Lets a caller confirm a file arrived whole.
-    """
-    for line in reversed(text.splitlines()):
-        if not line.strip():
-            continue
-        fields = _split(line)
-        if fields and fields[0] == "C" and len(fields) >= 3:
-            try:
-                return int(fields[2])
-            except ValueError:
-                return None
-        return None
-    return None
-
-
 def _split(line: str) -> list[str]:
     """Split one CSV line, honouring the quoting AEMO uses around timestamps."""
     return next(csv.reader(io.StringIO(line)))

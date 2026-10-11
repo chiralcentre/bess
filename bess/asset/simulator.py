@@ -72,7 +72,8 @@ class SimulationResult:
     spec: BatterySpec
 
     def __post_init__(self) -> None:
-        """Check the frame carries what everything downstream expects in REQUIRED_COMMENTS.
+        """Check the frame carries every column in ``REQUIRED_COLUMNS``.
+
         Failing here names the missing column, close to where the mistake was made.
         """
         missing = [c for c in REQUIRED_COLUMNS if c not in self.intervals.columns]
@@ -102,12 +103,6 @@ class SimulationResult:
     @property
     def energy_sold_mwh(self) -> float:
         return float(self.intervals["discharge_mwh"].sum())
-
-    @property
-    def equivalent_full_cycles(self) -> float:
-        """Energy discharged, expressed as multiples of a full tank."""
-        drained = self.energy_sold_mwh / self.spec.discharge_efficiency
-        return drained / self.spec.capacity_mwh
 
     @property
     def clipped_mwh(self) -> float:

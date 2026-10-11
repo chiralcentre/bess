@@ -11,7 +11,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from bess.marketdata.mms import MMSParseError, declared_record_count, extract_table
+from bess.marketdata.mms import MMSParseError, extract_table
 from bess.marketdata.prices import NEM_TIMEZONE, _clean
 
 # A miniature DispatchIS file. Two tables, so the parser has to ignore one, and
@@ -64,9 +64,6 @@ class TestMMSParser:
         with pytest.raises(MMSParseError, match="before its header"):
             extract_table('D,DISPATCH,PRICE,5,"2026/10/08 00:05:00",NSW1\n',
                           "DISPATCH", "PRICE")
-
-    def test_reads_the_footer_record_count(self) -> None:
-        assert declared_record_count(FIXTURE) == 7
 
 
 def _raw(rows: list[dict]) -> pd.DataFrame:
