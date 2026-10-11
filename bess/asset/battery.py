@@ -1,13 +1,10 @@
 """Physical description of the battery.
 
-The optimiser, the simulator and the dashboard all read their limits from a
-single ``BatterySpec``. Values come from :mod:`bess.config`; this module
-describes the shape; the config holds the numbers.
+Values come from :mod:`bess.config`; this module describes the shape.
 
 Unit convention, relied on everywhere: ``charge_mwh`` and ``discharge_mwh`` are
-**grid-side** -- what the meter sees and what is paid for -- while state of
-charge is measured inside the battery. The efficiencies are the exchange rate
-between those two places.
+**grid-side**, while state of charge is measured inside the battery. The
+efficiencies are the exchange rate between the two.
 """
 
 from __future__ import annotations

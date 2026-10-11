@@ -1,13 +1,8 @@
 """Plotly figures for the dashboard.
 
-Kept apart from the Streamlit layout so the figures can be built and checked
-without a browser, and so the layout file stays about arrangement.
-
-The day chart is the one that matters. It puts the water value on the same axis
-as the price, because that single pair explains every decision the battery
-makes: above the line it sells, below it buys. Everything else -- the shading,
-the state of charge, the running P&L -- is there to confirm what those two
-lines already say.
+Kept apart from the Streamlit layout so figures can be built and tested without
+a browser. The day chart puts the water value on the same axis as the price,
+because that pair explains every decision the battery makes.
 """
 
 from __future__ import annotations

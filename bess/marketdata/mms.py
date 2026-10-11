@@ -1,20 +1,13 @@
 """Parser for AEMO's MMS flat-file CSV format.
 
-An MMS file holds several unrelated tables, each introduced by its own header::
+A file holds several tables, each introduced by its own ``I`` header row::
 
-    C,NEMP.WORLD,DISPATCHIS,AEMO,PUBLIC,2026/10/08,00:00:08,...
     I,DISPATCH,PRICE,5,SETTLEMENTDATE,RUNNO,REGIONID,...
     D,DISPATCH,PRICE,5,"2026/10/08 00:05:00",1,NSW1,...
-    C,"END OF REPORT",1189
 
-``C`` is a comment (the last carries a row count, useful as a completeness
-check), ``I`` declares the columns for the ``D`` rows that follow, and ``D`` is
-data.
-
-**Columns must be read from the ``I`` row, never from fixed positions.** Table
-versions differ within a single file -- DispatchIS carries ``CASE_SOLUTION``
-v2, ``PRICE`` v5 and ``REGIONSUM`` v9 side by side -- so a hard-coded index
-works until AEMO adds a column, and then silently reads the wrong one.
+**Columns must be read from the ``I`` row, never fixed positions.** Versions
+differ within one file, so a hard-coded index works until AEMO adds a column
+and then silently reads the wrong one.
 """
 
 from __future__ import annotations

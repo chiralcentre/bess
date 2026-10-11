@@ -1,29 +1,9 @@
-"""Running a strategy across a window.
+"""Running a strategy across a window, by trading day or in one pass.
 
-Wires the packages together: takes a price series and a strategy, optimises,
-replays every schedule through the simulator, and returns one frame covering
-the whole window.
-
-Two horizons are available, and the choice is a real modelling decision.
-
-``"daily"`` (the default)
-    Each trading day is optimised on its own, opening and closing empty. The
-    battery stays on a daily cycle, which is how a real operator runs it and
-    how warranty cycle limits are counted, and every day's revenue is a
-    self-contained round trip that can be compared with any other day.
-
-``"continuous"``
-    One optimisation across the whole window, with state of charge flowing
-    freely over day boundaries and only the first and last levels pinned. This
-    earns more, because the daily reset is bookkeeping rather than physics --
-    a real battery does not empty itself at 04:00. The cost is that a day's
-    revenue becomes a cashflow: it can sell energy bought the day before, so
-    per-day figures stop being round trips.
-
-Continuous mode also removes the ceiling the daily reset was quietly placing on
-how long the battery sits full. The model charges for throughput and nothing
-for standing still, so a long hold at high state of charge is free here in a
-way it is not in reality. See the README under "Limitations".
+Two horizons. ``"daily"`` optimises each trading day independently, opening and
+closing empty, so every day is a self-contained round trip. ``"continuous"``
+optimises the whole window at once, letting charge carry over; it earns more,
+but a day's revenue becomes a cashflow. See the README.
 """
 
 from __future__ import annotations

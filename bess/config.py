@@ -1,12 +1,8 @@
 """Every assumption in the model, in one place.
 
-Changing a number here changes it everywhere: the optimiser, the simulator, the
-dashboard and the tests all read from this module, so the README and the
-running system cannot drift apart.
-
-The reasoning behind each choice -- why a four-hour battery, why 81%
-round-trip, why thirty days -- is in the README under "Assumptions". Vary a
-value for a sensitivity run with :func:`dataclasses.replace`.
+Changing a number here changes it everywhere. The reasoning behind each choice
+is in the README under "Assumptions"; vary one for a sensitivity run with
+:func:`dataclasses.replace`.
 """
 
 from __future__ import annotations

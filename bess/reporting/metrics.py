@@ -1,16 +1,8 @@
 """Headline numbers, in the terms a trader would ask for them.
 
-Two things are reported that a naive summary would leave out.
-
-**Gross and net revenue separately.** Gross is market cashflow -- what
-settlement would pay. Net subtracts modelled degradation, which is a real cost
-but not a cashflow. Conflating them either overstates the P&L or hides what the
-wear assumption is doing.
-
-**The daily distribution alongside the total.** NEM revenue is concentrated:
-the market is energy-only, so price spikes are the mechanism that funds peaking
-capacity, and a handful of days can carry a large share of the value. A total
-alone hides that, and it is the first thing to check before trusting a number.
+Gross and net revenue are reported separately, since degradation is a real cost
+but not a cashflow. The daily distribution accompanies the total, because NEM
+revenue is concentrated and a total alone hides that.
 """
 
 from __future__ import annotations

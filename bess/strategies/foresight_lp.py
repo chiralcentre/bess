@@ -1,17 +1,11 @@
 """Perfect-hindsight optimum, as a linear program.
 
-Given the whole price series up front, this finds the schedule no other
-schedule can beat: an answer to the brief, and the ceiling any live strategy is
-measured against. Three unknowns per interval -- energy bought, energy sold,
-and the resulting state of charge -- chosen together to maximise revenue less
-degradation.
+Given the whole price series up front, finds the schedule no other schedule can
+beat: both an answer and the ceiling a live strategy is measured against. Three
+unknowns per interval -- energy bought, energy sold, resulting state of charge.
 
-The formulation, the four constraint groups and the case for an LP are set out
-in the README. The shadow prices of the bookkeeping constraints come back as
-the water value, which is what makes each interval explainable.
-
-Nothing here forbids buying and selling in the same interval. That is
-deliberate: the degradation cost prices it. See the README.
+Nothing here forbids buying and selling in the same interval; the degradation
+cost prices it. Formulation and reasoning are in the README.
 """
 
 from __future__ import annotations

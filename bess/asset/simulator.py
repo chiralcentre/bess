@@ -1,14 +1,11 @@
-"""Replay a schedule through the battery and work out what actually happened.
+"""Replay a schedule through the battery and record what happened.
 
 The only place in the project that turns a schedule into state of charge and
-into money. Strategies propose; the simulator disposes. Every strategy is
-therefore scored by identical arithmetic, and the optimiser's own objective can
-be checked against an independent recomputation -- they agree only if the LP's
-constraint matrix is right.
+into money, so every strategy is scored by identical arithmetic and the
+optimiser's objective can be checked against an independent recomputation.
 
-Infeasible requests are clipped to what the battery could really do, and the
-removed energy is recorded. A broken strategy shows up as non-zero
-``clipped_mwh``, and its revenue stays physically achievable.
+Infeasible requests are clipped to what the battery could really do, with the
+removed energy recorded in ``clipped_mwh``.
 """
 
 from __future__ import annotations

@@ -1,23 +1,20 @@
 """Fetching raw dispatch files from AEMO's public NEMWEB server.
 
-Targets the daily ``ARCHIVE`` files. A thirty-day backtest is thirty downloads
-there, against roughly 8,640 from ``Current``. Each daily file is a
-**zip of 288 zips**, one per dispatch interval, each holding a single CSV.
-
-Everything is cached to disk by filename, so later runs are offline and
-instant. The README covers the trade-offs between the two directories.
+Targets the daily ``ARCHIVE`` files: thirty downloads for a thirty-day window,
+against roughly 8,640 from ``Current``. Each daily file is a **zip of 288
+zips**. Everything is cached to disk by filename, so later runs are offline.
 """
 
 from __future__ import annotations
 
 import io
 import re
-import time
 import zipfile
 from collections.abc import Iterator
 from datetime import date, datetime
 from pathlib import Path
 
+import backoff
 import requests
 
 NEMWEB_BASE = "https://nemweb.com.au"
@@ -30,9 +27,26 @@ _ARCHIVE_FILE_RE = re.compile(r"PUBLIC_DISPATCHIS_(\d{8})\.zip$", re.IGNORECASE)
 
 DEFAULT_USER_AGENT = "bess-arbitrage-study/1.0 (educational backtest)"
 
+#: Retry policy. Waits grow as 2 s, 4 s, with full jitter applied by default
+#: so repeated attempts spread out instead of hitting a public server in
+#: lockstep.
+MAX_TRIES = 3
+BACKOFF_BASE_SECONDS = 2.0
+
 
 class NemwebError(RuntimeError):
     """A file could not be listed or retrieved."""
+
+
+def _is_client_error(exc: Exception) -> bool:
+    """Stop retrying a request the server will keep refusing.
+
+    A 404 for a day the archive does not hold will not become a 200 by
+    waiting, so retrying it only delays a clear error. Server errors and
+    connection failures are worth another attempt.
+    """
+    response = getattr(exc, "response", None)
+    return response is not None and 400 <= response.status_code < 500
 
 
 class NemwebClient:
@@ -43,14 +57,10 @@ class NemwebClient:
         cache_dir: Path | str = Path("data/raw"),
         user_agent: str = DEFAULT_USER_AGENT,
         timeout: float = 120.0,
-        max_retries: int = 3,
-        backoff_seconds: float = 2.0,
     ) -> None:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.timeout = timeout
-        self.max_retries = max_retries
-        self.backoff_seconds = backoff_seconds
         self.session = requests.Session()
         self.session.headers["User-Agent"] = user_agent
 
@@ -107,18 +117,24 @@ class NemwebClient:
         partial.replace(destination)
         return destination
 
+    @backoff.on_exception(
+        backoff.expo,
+        requests.RequestException,
+        max_tries=MAX_TRIES,
+        base=BACKOFF_BASE_SECONDS,
+        giveup=_is_client_error,
+    )
+    def _fetch(self, url: str) -> bytes:
+        response = self.session.get(url, timeout=self.timeout)
+        response.raise_for_status()
+        return response.content
+
     def _get(self, url: str) -> bytes:
-        last_error: Exception | None = None
-        for attempt in range(self.max_retries):
-            try:
-                response = self.session.get(url, timeout=self.timeout)
-                response.raise_for_status()
-                return response.content
-            except requests.RequestException as exc:
-                last_error = exc
-                if attempt < self.max_retries - 1:
-                    time.sleep(self.backoff_seconds * (2**attempt))
-        raise NemwebError(f"could not retrieve {url}: {last_error}") from last_error
+        """Fetch with retries, reporting failure as a :class:`NemwebError`."""
+        try:
+            return self._fetch(url)
+        except requests.RequestException as exc:
+            raise NemwebError(f"could not retrieve {url}: {exc}") from exc
 
 
 def iter_interval_csvs(archive_zip: Path) -> Iterator[tuple[str, str]]:

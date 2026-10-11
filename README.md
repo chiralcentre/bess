@@ -28,9 +28,88 @@ A parsed 30-calendar-day price series is committed under `data/sample/`, so
 **nothing needs the network**. Re-fetching from AEMO takes 51 s and 168 MB; the committed
 cache loads in 0.24 s.
 
-More views: `run.py --daily`, `--trades 20`, `--day 2026-10-04`, `--export out/`,
-`--refresh`, `--horizon continuous`, and `--power-mw` / `--degradation` for
-sensitivity runs.
+## Running a backtest
+
+### The two modes of operation
+
+The battery can be optimised one trading day at a time, or across the whole
+window in a single pass. Both run over exactly the same 8,352 intervals.
+
+**Daily** — each trading day opens and closes empty, so a day's revenue is a
+self-contained round trip:
+
+```bash
+python run.py
+```
+
+```
+  net revenue         $    348,221.37
+  full cycles              31.9  (1.10/day)
+```
+
+**Continuous** — one optimisation across all 29 days, with charge free to carry
+over midnight:
+
+```bash
+python run.py --horizon continuous
+```
+
+```
+  net revenue         $    376,190.50
+  full cycles              31.0  (1.07/day)
+```
+
+Continuous earns **8.0% more**, holding up to 190.7 MWh overnight, and does it
+with *fewer* cycles. Freed from emptying every day it skips marginal cycles and
+saves the charge for better moments. Daily is the default because each day's
+figure stands on its own; under a continuous horizon a day can sell energy
+bought earlier, so its revenue becomes a cashflow. The dashboard has the same
+switch in its sidebar.
+
+### Every option
+
+| Option | What it does |
+|---|---|
+| *(none)* | Data-quality report, then headline metrics for the window |
+| `--horizon daily` / `continuous` | Optimise per trading day (default) or in one pass |
+| `--daily` | One line per trading day: revenue, energy, price range |
+| `--trades N` | The N largest trades by cashflow, each with its reason |
+| `--day YYYY-MM-DD` | One trading day, interval by interval, active intervals only |
+| `--export DIR` | Write `intervals.csv`, `trades.csv` and `daily.csv` |
+| `--start YYYY-MM-DD` | First calendar day of the window |
+| `--end YYYY-MM-DD` | Last calendar day of the window |
+| `--power-mw MW` | Override the power rating for a sensitivity run |
+| `--degradation AUD_PER_MWH` | Override the degradation cost |
+| `--refresh` | Re-fetch from AEMO instead of reading the committed cache |
+
+Flags combine. Four worth knowing:
+
+```bash
+python run.py --horizon continuous --daily
+```
+
+Shows which days carry charge over, since under a continuous horizon the daily
+figures stop balancing to an empty battery.
+
+```bash
+python run.py --power-mw 100 --degradation 10
+```
+
+A two-hour battery with double the wear cost — how the sensitivity tables below
+were produced.
+
+```bash
+python run.py --day 2026-10-04 --trades 5
+```
+
+The best day in the window, interval by interval, alongside its largest trades.
+
+```bash
+python run.py --refresh --start 2026-10-01 --end 2026-10-08
+```
+
+Re-fetches eight days from AEMO and ignores the cache — the way to confirm the
+committed parquet still matches the source.
 
 ## Architecture
 

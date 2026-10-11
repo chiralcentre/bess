@@ -1,18 +1,10 @@
 """Command line entry point for the backtest.
 
-Run with no arguments for the headline summary::
-
-    python run.py
-
-Other views::
-
-    python run.py --trades 20           largest trades by cashflow
-    python run.py --daily               revenue for every trading day
-    python run.py --day 2026-09-21      one day, interval by interval
-    python run.py --export out/         write the frames to CSV
-    python run.py --refresh             re-fetch from NEMWEB first
+    python run.py              summary report
+    python run.py --help       every option
 
 Reads the committed price cache by default, so nothing needs the network.
+Options are documented in the README under "Running a backtest".
 """
 
 from __future__ import annotations
@@ -94,8 +86,10 @@ def _parse_args() -> argparse.Namespace:
                         help="optimise each trading day on its own (default), "
                              "or the whole window in one pass with charge "
                              "carrying across day boundaries")
-    parser.add_argument("--start", type=date.fromisoformat, metavar="YYYY-MM-DD")
-    parser.add_argument("--end", type=date.fromisoformat, metavar="YYYY-MM-DD")
+    parser.add_argument("--start", type=date.fromisoformat, metavar="YYYY-MM-DD",
+                        help="first calendar day of the window")
+    parser.add_argument("--end", type=date.fromisoformat, metavar="YYYY-MM-DD",
+                        help="last calendar day of the window")
     parser.add_argument("--power-mw", type=float, metavar="MW",
                         help="override the power rating, for a sensitivity run")
     parser.add_argument("--degradation", type=float, metavar="AUD_PER_MWH",

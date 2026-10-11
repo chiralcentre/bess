@@ -1,13 +1,10 @@
 """Streamlit dashboard.
 
-    streamlit run app.py
+    python -m streamlit run app.py
 
-Reads the committed price cache, so it starts with no network access.
-
-The layout answers three questions in order, because that is the order a
-trader asks them: what did it earn, why did it trade when it did, and should I
-believe the number. The sidebar exists so the assumptions can be argued with
-rather than taken on trust -- drag the power rating and watch the revenue move.
+Reads the committed price cache, so it starts with no network access. The
+sidebar exists so the assumptions can be argued with rather than taken on
+trust.
 """
 
 from __future__ import annotations

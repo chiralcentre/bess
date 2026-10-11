@@ -1,14 +1,8 @@
 """Turning 8,640 five-minute rows into something a trader would read.
 
-Nobody reads a schedule interval by interval. A trader reads *trades*: a block
-of time, a direction, a volume, an average price, and a reason. This module
-collapses runs of consecutive intervals with the same action into those blocks
-and writes the reason in words.
-
-The reason is assembled here, deliberately. The simulator records facts --
-which constraint bound, what the state of charge was -- and this module turns
-those facts into prose. That split keeps the physics testable without parsing
-English.
+Collapses runs of consecutive same-direction intervals into trades and writes
+the reason in words. The simulator records facts; this module turns them into
+prose, which keeps the physics testable without parsing English.
 """
 
 from __future__ import annotations

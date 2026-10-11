@@ -1,17 +1,11 @@
 """Turning raw dispatch files into a clean NSW1 price series.
 
-Four interpretation rules are applied here, each a silent bug if taken the
-other way. The reasoning is in the README; the rules are restated because
-enforcing them is what this module is for.
+Four interpretation rules, each a silent bug if taken the other way:
 
-* **Market time is AEST, fixed at UTC+10, all year.** Never a named zone -- the
-  NEM does not observe daylight saving.
-* **``SETTLEMENTDATE`` labels the END of its interval.** A row stamped 14:05
-  describes 14:00 to 14:05.
-* **Intervention runs are not the market outcome.** ``INTERVENTION = 0`` is
-  preferred, falling back where only an intervention run exists.
-* **Gaps are never filled.** A stale price produces a trade that never
-  happened. Missing intervals stay in the index, marked untradable.
+* Market time is AEST, fixed UTC+10, all year -- never a named zone.
+* ``SETTLEMENTDATE`` labels the END of its interval.
+* ``INTERVENTION = 0`` wins where an intervention run duplicates a timestamp.
+* Gaps are marked untradable, never filled.
 """
 
 from __future__ import annotations
