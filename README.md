@@ -277,7 +277,7 @@ configured case shows zero. The count is reported either way.
 ## Market data
 
 Source: `DISPATCHIS` daily archives from
-[nemweb.com.au](https://nemweb.com.au/Reports/) — one zip per day, each holding
+[nemweb.com.au](https://nemweb.com.au/Reports/Archive/DispatchIS_Reports/) — one zip per day, each holding
 288 zips, each one CSV. The daily archive takes 30 downloads for a 30-day window, where `Current`
 would take roughly 8,640.
 
@@ -476,9 +476,22 @@ energy bought earlier, so its revenue becomes a cashflow.
 
 ## Next steps
 
-1. **Operate without hindsight** — a trailing-percentile or forecast-driven
-   rule against the same simulator, reporting what share of this ceiling it
-   captures and where its worst decisions fall.
+1. **Operate without hindsight** — a forecast-driven rule against the same
+   simulator, reporting what share of this ceiling it captures and where its
+   worst decisions fall. AEMO publishes a forward price curve in
+   `PredispatchIS_Reports`, republished every 30 minutes and reaching about
+   29 hours ahead. Measured against what actually happened over this window,
+   it decorrelates with distance:
+
+   | lead time | correlation with actual |
+   |---|---:|
+   | 0–30 min | 0.83 |
+   | 2–6 h | 0.68 |
+   | 6–12 h | 0.60 |
+   | 12–24 h | **0.14** |
+
+   So a live strategy should plan on the near part of the curve and treat the
+   far part as a level rather than a schedule.
 2. **Day-level round-trip P&L** in the trade log, which closes the one-sided
    reading above.
 3. **Live ingestion** from `Reports/Current`, plus vintage-correct predispatch.

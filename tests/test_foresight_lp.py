@@ -179,3 +179,128 @@ class TestSimultaneousFlow:
         result = simulate(spec, mild, schedule.charge_mwh, schedule.discharge_mwh)
 
         assert result.simultaneous_flow_intervals == 0
+
+
+class TestParameterProperties:
+    """Invariants that must hold across the parameter space.
+
+    Found by a sweep of price shapes against efficiency, degradation, power,
+    endpoints, interval length and the tradable mask.
+    """
+
+    def test_more_power_never_earns_less(self, spec: BatterySpec) -> None:
+        """A bigger connection only widens the feasible set."""
+        prices = _prices(list(np.linspace(-100, 400, 48)))
+        revenues = []
+        for mw in (10.0, 25.0, 50.0, 100.0):
+            tuned = replace(spec, max_charge_mw=mw, max_discharge_mw=mw)
+            schedule = ForesightLP(terminal_soc_mwh=0.0).plan(tuned, prices)
+            revenues.append(
+                simulate(
+                    tuned, prices, schedule.charge_mwh, schedule.discharge_mwh
+                ).net_revenue_aud
+            )
+        assert all(b >= a - 1e-6 for a, b in zip(revenues, revenues[1:]))
+
+    def test_more_wear_never_earns_more(self, spec: BatterySpec) -> None:
+        prices = _prices(list(np.linspace(-100, 400, 48)))
+        revenues = []
+        for delta in (0.0, 1.0, 5.0, 50.0):
+            tuned = replace(spec, degradation_cost_per_mwh=delta)
+            schedule = ForesightLP(terminal_soc_mwh=0.0).plan(tuned, prices)
+            revenues.append(
+                simulate(
+                    tuned, prices, schedule.charge_mwh, schedule.discharge_mwh
+                ).net_revenue_aud
+            )
+        assert all(b <= a + 1e-6 for a, b in zip(revenues, revenues[1:]))
+
+    def test_better_efficiency_earns_more_on_arbitrage(
+        self, spec: BatterySpec
+    ) -> None:
+        """Holds while the profit comes from buying low and selling high."""
+        prices = _prices(list(np.linspace(-100, 400, 48)))
+        revenues = []
+        for eta in (0.6, 0.8, 0.95, 1.0):
+            tuned = replace(spec, charge_efficiency=eta, discharge_efficiency=eta)
+            schedule = ForesightLP(terminal_soc_mwh=0.0).plan(tuned, prices)
+            revenues.append(
+                simulate(
+                    tuned, prices, schedule.charge_mwh, schedule.discharge_mwh
+                ).net_revenue_aud
+            )
+        assert all(b >= a - 1e-6 for a, b in zip(revenues, revenues[1:]))
+
+    def test_worse_efficiency_earns_more_when_paid_to_consume(
+        self, spec: BatterySpec
+    ) -> None:
+        """The reverse, and it is correct rather than a bug.
+
+        On a falling series the cheap intervals come last, so there is no
+        arbitrage; the only profit is being paid to consume at negative prices.
+        Energy wasted in the round trip never has to be sold back, so a less
+        efficient battery can be paid to consume more. At 100% it wastes
+        nothing and earns nothing.
+        """
+        prices = _prices(list(np.linspace(400, -100, 48)))
+        revenues = []
+        for eta in (0.6, 0.8, 0.95, 1.0):
+            tuned = replace(spec, charge_efficiency=eta, discharge_efficiency=eta)
+            schedule = ForesightLP(terminal_soc_mwh=0.0).plan(tuned, prices)
+            revenues.append(
+                simulate(
+                    tuned, prices, schedule.charge_mwh, schedule.discharge_mwh
+                ).net_revenue_aud
+            )
+        assert all(b <= a + 1e-6 for a, b in zip(revenues, revenues[1:]))
+        assert revenues[-1] == pytest.approx(0.0, abs=1e-6)
+
+    def test_a_falling_series_without_negative_prices_earns_nothing(
+        self, spec: BatterySpec
+    ) -> None:
+        """Cheap after dear, nothing to be paid for consuming: stay idle."""
+        prices = _prices(list(np.linspace(400, 50, 48)))
+        schedule = ForesightLP(terminal_soc_mwh=0.0).plan(spec, prices)
+
+        assert schedule.charge_mwh.sum() == pytest.approx(0.0, abs=1e-6)
+        assert schedule.discharge_mwh.sum() == pytest.approx(0.0, abs=1e-6)
+
+    @pytest.mark.parametrize("minutes", [1, 5, 30, 60])
+    def test_any_interval_length_stays_feasible(
+        self, spec: BatterySpec, minutes: int
+    ) -> None:
+        tuned = replace(spec, interval_minutes=minutes)
+        prices = pd.Series(
+            [-1000.0] * 24 + [16000.0] * 24,
+            index=pd.date_range("2026-09-09", periods=48, freq=f"{minutes}min"),
+        )
+        schedule = ForesightLP(terminal_soc_mwh=0.0).plan(tuned, prices)
+        result = simulate(tuned, prices, schedule.charge_mwh, schedule.discharge_mwh)
+
+        assert result.clipped_mwh == pytest.approx(0.0, abs=1e-6)
+        assert schedule.claimed_net_revenue_aud == pytest.approx(
+            result.net_revenue_aud, rel=1e-9
+        )
+
+    @pytest.mark.parametrize(
+        "values",
+        [
+            [100.0],                       # a single interval
+            [0.0] * 48,                    # every price exactly zero
+            [-1000.0, 17500.0] * 24,       # the market floor and cap, alternating
+            [80.0] * 48,                   # perfectly flat
+        ],
+        ids=["one interval", "all zero", "market extremes", "flat"],
+    )
+    def test_degenerate_price_series_stay_feasible(
+        self, spec: BatterySpec, values: list[float]
+    ) -> None:
+        prices = _prices(values)
+        schedule = ForesightLP(terminal_soc_mwh=0.0).plan(spec, prices)
+        result = simulate(spec, prices, schedule.charge_mwh, schedule.discharge_mwh)
+
+        assert result.clipped_mwh == pytest.approx(0.0, abs=1e-6)
+        assert result.intervals["soc_after_mwh"].min() >= -1e-6
+        assert result.intervals["soc_after_mwh"].max() <= spec.capacity_mwh + 1e-6
+        # Idling is always feasible here, so the optimum cannot be a loss.
+        assert result.net_revenue_aud >= -1e-6
