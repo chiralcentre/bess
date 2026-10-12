@@ -252,11 +252,21 @@ $c(1 + \text{rte})$. Set against doing nothing, it pays when
 
 $$|p| > \delta \frac{1 + \text{rte}}{1 - \text{rte}}$$
 
-Doing nothing is rarely the alternative, though. While the tank has room,
-charging alone earns $|p| \cdot c$ against this action's
-$|p| \cdot c(1 - \text{rte})$ **and** stores energy worth selling later, so it
-wins at any price. The threshold only decides anything once charging is
-blocked, which in practice means a full battery.
+That compares burning against doing nothing, which is rarely the real choice.
+While the tank has room the alternative is charging, and below the threshold
+charging always wins:
+
+$$\text{charge} - \text{burn} = c\left[\lambda \eta_c + \text{rte}\,(\delta + |p|)\right] > 0$$
+
+Every term is positive, so burning never competes while there is room. The
+threshold only decides anything once charging is blocked, which in practice
+means a full battery.
+
+The restriction matters. Charging beats idling only while
+$p \le \lambda\eta_c - \delta$, so at a high enough price doing nothing is
+better than either. Burning is already worse than idling at any positive
+price, so it is only ever a candidate below the threshold, and that is exactly
+where charging dominates it.
 
 Suppressing it needs a binary variable and hides real behaviour. The
 degradation cost prices it instead, and the effect is measurable:
